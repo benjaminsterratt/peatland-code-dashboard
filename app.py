@@ -7,12 +7,19 @@ DATA = pd.read_csv("data.csv")
 userInterface = ui.page_sidebar(
     ui.sidebar(
         ui.accordion(
-                ui.accordion_panel("Type"),
-                ui.accordion_panel("Country"),
-                ui.accordion_panel("Developer"),
-                ui.accordion_panel("Validator"),
-                ui.accordion_panel("Status"),
-                ui.accordion_panel("PIUs Listed"),
+            ui.accordion_panel("Breakdown",
+                               ui.input_radio_buttons("groupby", None, ["Type", "Country", "Developer", "Validator", "Status", "PIUs Listed"]),
+                               ),
+            ui.accordion_panel("Filters",
+                               ui.accordion(
+                                   ui.accordion_panel("Type"),
+                                   ui.accordion_panel("Country"),
+                                   ui.accordion_panel("Developer"),
+                                   ui.accordion_panel("Validator"),
+                                   ui.accordion_panel("Status"),
+                                   ui.accordion_panel("PIUs Listed")
+                                   )
+                               )
             ),
         title = "Peatland Code Dashboard"),
     ui.layout_columns(
