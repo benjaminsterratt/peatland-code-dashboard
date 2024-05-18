@@ -1,8 +1,8 @@
-from shiny import run_app, App, reactive, ui
+from shiny import module, ui, reactive, App, run_app
 
 import pandas as pd
 
-#%% GLOBALS
+#%% INPUTS
 
 DATA = pd.read_csv("data.csv", keep_default_na = False)
 
@@ -12,29 +12,57 @@ DATA["PIUs Listed"] = DATA["PIUs Listed"].astype(pd.CategoricalDtype(["Yes", "No
 
 GROUPING_COLUMNS = ["Type", "Country", "Developer", "Validator", "Status", "PIUs Listed"]
 
-#%% FUNCTIONS
+#%% PRE-PROCESSING
 
-def ui_filter(columnName):
-    choices = list(DATA[columnName].sort_values().unique())
+CHOICES = {column: list(DATA[column].sort_values().unique()) for column in GROUPING_COLUMNS}
+
+#%% MODULES
+
+#%%% FILTER
+
+@module.ui
+def filter_ui(choices, controlsThreshold, title):
     elements = [
         ui.input_checkbox_group(
-            "filter_" + columnName.replace(" ", "_"), 
+            "filter", 
             None, 
             choices,
             selected = choices
             )
         ]
-    if len(choices) > 4:
+    if len(choices) > controlsThreshold:
         elements = [
             ui.layout_columns(
-                ui.input_action_button("filter_" + columnName.replace(" ", "_") + "_selectAll", "Select all"),
-                ui.input_action_button("filter_" + columnName.replace(" ", "_") + "_deselectAll", "Deselect all"),
+                ui.input_action_button("selectAll", "Select all"),
+                ui.input_action_button("deselectAll", "Deselect all"),
                 style = "margin-bottom: 32px;")
             ] + elements
     return ui.accordion_panel(
-        columnName,
+        title,
         *elements
         )
+
+@module.server
+def filter_server(input, output, session, choices, controlsThreshold, resetInput = None):
+    
+    if len(choices) > controlsThreshold:
+    
+        @reactive.effect
+        @reactive.event(input.selectAll)
+        def selectAll():
+            ui.update_checkbox_group("filter", selected = choices)
+            
+        @reactive.effect
+        @reactive.event(input.deselectAll)
+        def deselectAll():
+            ui.update_checkbox_group("filter", selected = [])
+            
+    if resetInput is not None:
+        
+        @reactive.effect
+        @reactive.event(resetInput)
+        def reset():
+            ui.update_checkbox_group("filter", selected = choices)
 
 #%% UI
 
@@ -47,7 +75,7 @@ userInterface = ui.page_sidebar(
             ui.accordion_panel("Filters",
                                ui.input_action_button("resetFilters", "Reset filters", style = "margin-left: 20px; margin-right: 20px; margin-bottom: 32px;"),
                                ui.accordion(
-                                   *[ui_filter(column) for column in GROUPING_COLUMNS],
+                                   *[filter_ui(column.replace(" ", "_"), CHOICES[column], 4, column) for column in GROUPING_COLUMNS],
                                    open = False)
                                ),
             open = True),
@@ -73,8 +101,10 @@ userInterface = ui.page_sidebar(
 
 #%% SERVER
 
-def server(input):
-    pass
+def server(input, output, session):
+
+    for column in GROUPING_COLUMNS:
+        filter_server(column.replace(" ", "_"), CHOICES[column], 4, input.resetFilters)
 
 app = App(userInterface, server)
 
