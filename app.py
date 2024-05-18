@@ -63,6 +63,8 @@ def filter_server(input, output, session, choices, controlsThreshold, resetInput
         @reactive.event(resetInput)
         def reset():
             ui.update_checkbox_group("filter", selected = choices)
+            
+    return input.filter
 
 #%% UI
 
@@ -103,8 +105,16 @@ userInterface = ui.page_sidebar(
 
 def server(input, output, session):
 
+    filters = {}
     for column in GROUPING_COLUMNS:
-        filter_server(column.replace(" ", "_"), CHOICES[column], 4, input.resetFilters)
+        filters[column] = filter_server(column.replace(" ", "_"), CHOICES[column], 4, input.resetFilters)
+        
+    @reactive.calc
+    def data():
+        data = DATA.copy()
+        for column in filters:
+            data = data[data[column].isin(filters[column]())]
+        return data
 
 app = App(userInterface, server)
 
