@@ -1,6 +1,8 @@
-from shiny import module, ui, reactive, App, run_app
+from shiny import module, ui, reactive, render, App, run_app
+from shinywidgets import output_widget, render_widget
 
 import pandas as pd
+import plotly.graph_objects as go
 
 #%% INPUTS
 
@@ -8,9 +10,8 @@ DATA = pd.read_csv("data.csv", keep_default_na = False)
 
 DATA["Country"] = DATA["Country"].astype(pd.CategoricalDtype(["England", "Scotland", "Wales", "Northern Ireland"], ordered = True))
 DATA["Status"] = DATA["Status"].astype(pd.CategoricalDtype(["Under Development", "Validated", "Restoration Validated"], ordered = True))
-DATA["PIUs Listed"] = DATA["PIUs Listed"].astype(pd.CategoricalDtype(["Yes", "No"], ordered = True))
 
-GROUPING_COLUMNS = ["Type", "Country", "Developer", "Validator", "Status", "PIUs Listed"]
+GROUPING_COLUMNS = ["Country", "Status", "PIU Issuance", "Developer", "Validator"]
 
 #%% PRE-PROCESSING
 
@@ -85,7 +86,8 @@ userInterface = ui.page_sidebar(
     ui.layout_columns(
         ui.layout_columns(
             ui.card(
-                ui.card_header("Carbon Pathway")
+                ui.card_header("Carbon Pathway"),
+                output_widget("carbonPathway")
                 ),
             ui.card(
                 ui.card_header("Key Statistics")
@@ -95,7 +97,9 @@ userInterface = ui.page_sidebar(
                 ),
             col_widths = [12, 6, 6]),
         ui.navset_card_pill(
-            ui.nav_panel("List"),
+            ui.nav_panel("List",
+                         ui.output_data_frame("projectList")
+                         ),
             ui.nav_panel("Map"),
             title = "Projects"),
         col_widths = [8, 4]),
@@ -115,8 +119,60 @@ def server(input, output, session):
         for column in filters:
             data = data[data[column].isin(filters[column]())]
         return data
+    
+    @render_widget
+    def carbonPathway():
+        df = data().copy()
+        df["Year"] = [list(range(df["Start Year"].min() - 1, df["End Year"].max() + 2)) for i in range(0, len(df))]
+        df = df.explode("Year")
+        df["Claimable Emission Reductions"] = (df["Claimable Emission Reductions"] / df["Duration"]).where((df["Year"] >= df["Start Year"]) & (df["Year"] <= df["End Year"]), 0)
+        df = df.groupby(["Year", input.groupby()])["Claimable Emission Reductions"].sum().reset_index().sort_values("Year")
+        df["Claimable Emission Reductions"] = df.groupby(input.groupby())["Claimable Emission Reductions"].cumsum()
+        return go.Figure(
+            data = [
+                go.Scatter(
+                    x = df.loc[df[input.groupby()] == value, "Year"],
+                    y = df.loc[df[input.groupby()] == value, "Claimable Emission Reductions"],
+                    stackgroup = "default",
+                    name = value
+                    )
+                for value in df[df["Year"] == df["Year"].max()].sort_values("Claimable Emission Reductions", ascending = False)[input.groupby()].unique()],
+            layout = go.Layout(
+                xaxis = {"title_text": "Year"},
+                yaxis = {"title_text": "Predicted claimable emission reductions (tCO2e)"},
+                legend = {"title_text": input.groupby(),
+                          "traceorder": "normal",
+                          "orientation": "h",
+                          "yref": "container"},
+                margin = {"l": 0, "r": 0, "t": 28, "b": 0},
+                template = "plotly_white"
+                )
+            )
+    
+    #AUTOSIZE PLOT
+
+    #CUSTOMISE MODE BAR
+        
+    #HOVER TEXT
+    
+    #REMOVE DOUBLE-CLICK ISOLATE POP-UP
+    
+    #ADD DEVELOPER AGGREGATE -> OTHER
+
+    @render.data_frame
+    def projectList():
+        return render.DataTable(data()[["Name"]], width = "100%", height = "100%", summary = False)
 
 app = App(userInterface, server)
 
 if __name__ == "__main__":
     run_app(app)
+
+#%% TODO
+
+#REORGANISE
+
+#ADD SELECTED PLOT
+
+#ADD SHOWCASE
+
