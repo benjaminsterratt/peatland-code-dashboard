@@ -147,6 +147,7 @@ def server(input, output, session):
             layout = go.Layout(
                 xaxis = {"title_text": "Year"},
                 yaxis = {"title_text": "Predicted claimable emission reductions (tCO<sub>2</sub>e)"},
+                showlegend = True,
                 legend = {"title_text": input.breakdown(),
                           "traceorder": "normal",
                           "orientation": "h",
