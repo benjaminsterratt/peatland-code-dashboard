@@ -22,7 +22,7 @@ CHOICES = {column: list(DATA[column].sort_values().unique()) for column in GROUP
 #%%% FILTER
 
 @module.ui
-def filter_ui(choices, controlsThreshold, title):
+def filter_ui(choices, title):
     elements = [
         ui.input_checkbox_group(
             "filter", 
@@ -31,7 +31,7 @@ def filter_ui(choices, controlsThreshold, title):
             selected = choices
             )
         ]
-    if len(choices) > controlsThreshold:
+    if len(choices) > 5:
         elements = [
             ui.layout_columns(
                 ui.input_action_button("selectAll", "Select all"),
@@ -44,9 +44,9 @@ def filter_ui(choices, controlsThreshold, title):
         )
 
 @module.server
-def filter_server(input, output, session, choices, controlsThreshold, resetInput = None):
+def filter_server(input, output, session, choices, resetInput = None):
     
-    if len(choices) > controlsThreshold:
+    if len(choices) > 5:
     
         @reactive.effect
         @reactive.event(input.selectAll)
@@ -73,16 +73,17 @@ userInterface = ui.page_sidebar(
     ui.sidebar(
         ui.accordion(
             ui.accordion_panel("Breakdown",
-                               ui.input_radio_buttons("groupby", None, GROUPING_COLUMNS),
+                               ui.input_radio_buttons("breakdown", None, GROUPING_COLUMNS),
                                ),
             ui.accordion_panel("Filters",
                                ui.input_action_button("resetFilters", "Reset filters", style = "margin-left: 20px; margin-right: 20px; margin-bottom: 32px;"),
                                ui.accordion(
-                                   *[filter_ui(column.replace(" ", "_"), CHOICES[column], 4, column) for column in GROUPING_COLUMNS],
+                                   *[filter_ui(column.replace(" ", "_"), CHOICES[column], column) for column in GROUPING_COLUMNS],
                                    open = False)
                                ),
             open = True),
         width = 420, title = "Peatland Code Dashboard"),
+    ui.head_content(ui.tags.style(".plotly-notifier {display: none;}", method = "inline")),
     ui.layout_columns(
         ui.layout_columns(
             ui.card(
@@ -111,7 +112,7 @@ def server(input, output, session):
 
     filters = {}
     for column in GROUPING_COLUMNS:
-        filters[column] = filter_server(column.replace(" ", "_"), CHOICES[column], 4, input.resetFilters)
+        filters[column] = filter_server(column.replace(" ", "_"), CHOICES[column], input.resetFilters)
         
     @reactive.calc
     def data():
@@ -123,42 +124,40 @@ def server(input, output, session):
     @render_widget
     def carbonPathway():
         df = data().copy()
+        order = df.groupby(input.breakdown(), observed = True)["Claimable Emission Reductions"].sum().sort_values(ascending = False).reset_index()[input.breakdown()].to_list()
+        if len(order) > 5:
+            order = order[0:5]
+            df[input.breakdown()] = df[input.breakdown()].where(df[input.breakdown()].isin(order), "Other")
+            order.append("Other")
         df["Year"] = [list(range(df["Start Year"].min() - 1, df["End Year"].max() + 2)) for i in range(0, len(df))]
         df = df.explode("Year")
         df["Claimable Emission Reductions"] = (df["Claimable Emission Reductions"] / df["Duration"]).where((df["Year"] >= df["Start Year"]) & (df["Year"] <= df["End Year"]), 0)
-        df = df.groupby(["Year", input.groupby()], observed = True)["Claimable Emission Reductions"].sum().reset_index().sort_values("Year")
-        df["Claimable Emission Reductions"] = df.groupby(input.groupby(), observed = True)["Claimable Emission Reductions"].cumsum()
+        df = df.groupby(["Year", input.breakdown()], observed = True)["Claimable Emission Reductions"].sum().reset_index().sort_values("Year")
+        df["Claimable Emission Reductions"] = df.groupby(input.breakdown(), observed = True)["Claimable Emission Reductions"].cumsum()
         return go.Figure(
             data = [
                 go.Scatter(
-                    x = df.loc[df[input.groupby()] == value, "Year"],
-                    y = df.loc[df[input.groupby()] == value, "Claimable Emission Reductions"],
+                    x = df.loc[df[input.breakdown()] == value, "Year"],
+                    y = df.loc[df[input.breakdown()] == value, "Claimable Emission Reductions"],
                     stackgroup = "default",
-                    name = value
+                    name = value,
+                    hovertemplate = "%{y:.3s}"
                     )
-                for value in df[df["Year"] == df["Year"].max()].sort_values("Claimable Emission Reductions", ascending = False)[input.groupby()].unique()],
+                for value in order],
             layout = go.Layout(
                 xaxis = {"title_text": "Year"},
-                yaxis = {"title_text": "Predicted claimable emission reductions (tCO2e)"},
-                legend = {"title_text": input.groupby(),
+                yaxis = {"title_text": "Predicted claimable emission reductions (tCO<sub>2</sub>e)"},
+                legend = {"title_text": input.breakdown(),
                           "traceorder": "normal",
                           "orientation": "h",
                           "yref": "container"},
+                hovermode = "x unified",
                 margin = {"l": 0, "r": 0, "t": 28, "b": 0},
+                modebar = {"remove": "autoScale2d"},
                 template = "plotly_white"
                 )
             )
     
-    #AUTOSIZE PLOT
-
-    #CUSTOMISE MODE BAR
-        
-    #HOVER TEXT
-    
-    #REMOVE DOUBLE-CLICK ISOLATE POP-UP
-    
-    #ADD DEVELOPER AGGREGATE -> OTHER
-
     @render.data_frame
     def projectList():
         return render.DataTable(data()[["Name"]], width = "100%", height = "100%", summary = False)
@@ -172,7 +171,8 @@ if __name__ == "__main__":
 
 #REORGANISE
 
-#ADD SELECTED PLOT
+    #ADD SELECTED PLOT
 
-#ADD SHOWCASE
-
+    #ADD SHOWCASE
+    
+#CONSISTENT COLOUR PALLETTES
