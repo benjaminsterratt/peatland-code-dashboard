@@ -126,8 +126,8 @@ def server(input, output, session):
         df["Year"] = [list(range(df["Start Year"].min() - 1, df["End Year"].max() + 2)) for i in range(0, len(df))]
         df = df.explode("Year")
         df["Claimable Emission Reductions"] = (df["Claimable Emission Reductions"] / df["Duration"]).where((df["Year"] >= df["Start Year"]) & (df["Year"] <= df["End Year"]), 0)
-        df = df.groupby(["Year", input.groupby()])["Claimable Emission Reductions"].sum().reset_index().sort_values("Year")
-        df["Claimable Emission Reductions"] = df.groupby(input.groupby())["Claimable Emission Reductions"].cumsum()
+        df = df.groupby(["Year", input.groupby()], observed = True)["Claimable Emission Reductions"].sum().reset_index().sort_values("Year")
+        df["Claimable Emission Reductions"] = df.groupby(input.groupby(), observed = True)["Claimable Emission Reductions"].cumsum()
         return go.Figure(
             data = [
                 go.Scatter(
