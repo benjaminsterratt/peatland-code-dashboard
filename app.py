@@ -2,6 +2,8 @@ from shiny import module, ui, reactive, render, App, run_app
 from shinywidgets import output_widget, render_widget
 
 import pandas as pd
+
+import plotly.colors as co
 import plotly.graph_objects as go
 
 #%% INPUTS
@@ -16,6 +18,8 @@ GROUPING_COLUMNS = ["Country", "Status", "PIU Issuance", "Developer", "Validator
 #%% PRE-PROCESSING
 
 CHOICES = {column: list(DATA[column].sort_values().unique()) for column in GROUPING_COLUMNS}
+
+COLOUR_PALETTE = {column: {(CHOICES[column] + ["Other"])[i]: co.DEFAULT_PLOTLY_COLORS[i % len(co.DEFAULT_PLOTLY_COLORS)] for i in range(0, len(CHOICES[column]) + 1)} for column in GROUPING_COLUMNS}
 
 #%% MODULES
 
@@ -94,7 +98,8 @@ userInterface = ui.page_sidebar(
                 ui.card_header("Key Statistics")
                 ),
             ui.card(
-                ui.card_header("Area Breakdown")
+                ui.card_header("Area Breakdown"),
+                output_widget("areaBreakdown")
                 ),
             col_widths = [12, 6, 6]),
         ui.navset_card_pill(
@@ -141,6 +146,7 @@ def server(input, output, session):
                     y = df.loc[df[input.breakdown()] == value, "Claimable Emission Reductions"],
                     stackgroup = "default",
                     name = value,
+                    marker = {"color": COLOUR_PALETTE[input.breakdown()][value]},
                     hovertemplate = "%{y:.3s}"
                     )
                 for value in order],
@@ -159,6 +165,11 @@ def server(input, output, session):
                 )
             )
     
+    @render_widget
+    def areaBreakdown():
+        df = data().copy()
+        pass
+    
     @render.data_frame
     def projectList():
         return render.DataTable(data()[["Name"]], width = "100%", height = "100%", summary = False)
@@ -172,8 +183,12 @@ if __name__ == "__main__":
 
 #REORGANISE
 
-    #ADD SELECTED PLOT
-
-    #ADD SHOWCASE
+    #ADD SELECTED PLOT (PIE OF SELECTED (BY BREAKDOWN) vs. UNSELECTED)
     
-#CONSISTENT COLOUR PALLETTES
+    #ADD AREA PLOT AS GROUPED (AREA TYPE) + STACKED (AREA SUB-TYPE) BAR (BREAKDOWN) CHART
+    
+    #DISTRIBUTION PLOT AS RIDGELINE (AREA, DURATION, CARBON EMISSIONS)
+
+    #ADD SHOWCASE (NO. OF PROJECTS, TOTAL AREA, TOTAL CARBON EMISSIONS)
+    
+#INFO BUTTON, SPECIFICALLY FOR CARBON PATHWAY
