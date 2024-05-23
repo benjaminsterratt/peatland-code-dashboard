@@ -21,6 +21,16 @@ CHOICES = {column: list(DATA[column].sort_values().unique()) for column in GROUP
 
 COLOUR_PALETTE = {column: {(CHOICES[column] + ["Other"])[i]: co.DEFAULT_PLOTLY_COLORS[i % len(co.DEFAULT_PLOTLY_COLORS)] for i in range(0, len(CHOICES[column]) + 1)} for column in GROUPING_COLUMNS}
 
+#%% FUNCTIONS
+
+def orderAndTruncateBreakdown(df, breakdown, order, truncate = 5):
+    order = df.groupby(breakdown, observed = True)[order].sum().sort_values(ascending = False).reset_index()[breakdown].to_list()
+    if len(order) > truncate:
+        order = order[0:5]
+        df[breakdown] = df[breakdown].where(df[breakdown].isin(order), "Other")
+        order.append("Other")
+    return df, order
+
 #%% MODULES
 
 #%%% FILTER
@@ -129,11 +139,7 @@ def server(input, output, session):
     @render_widget
     def carbonPathway():
         df = data().copy()
-        order = df.groupby(input.breakdown(), observed = True)["Claimable Emission Reductions"].sum().sort_values(ascending = False).reset_index()[input.breakdown()].to_list()
-        if len(order) > 5:
-            order = order[0:5]
-            df[input.breakdown()] = df[input.breakdown()].where(df[input.breakdown()].isin(order), "Other")
-            order.append("Other")
+        df, order = orderAndTruncateBreakdown(df, input.breakdown(), "Claimable Emission Reductions")
         df["Year"] = [list(range(df["Start Year"].min() - 1, df["End Year"].max() + 2)) for i in range(0, len(df))]
         df = df.explode("Year")
         df["Claimable Emission Reductions"] = (df["Claimable Emission Reductions"] / df["Duration"]).where((df["Year"] >= df["Start Year"]) & (df["Year"] <= df["End Year"]), 0)
@@ -168,8 +174,31 @@ def server(input, output, session):
     @render_widget
     def areaBreakdown():
         df = data().copy()
-        pass
+        df = df.melt(input.breakdown(), [column for column in df.columns if column.startswith("Subarea")], "Subarea Type", "Subarea Area")
+        df, order = orderAndTruncateBreakdown(df, input.breakdown(), "Subarea Area")
+        df[input.breakdown()] = df[input.breakdown()].astype(pd.CategoricalDtype(order, ordered = True))
+        df = df.groupby(["Subarea Type", input.breakdown()], observed = True)["Subarea Area"].sum().reset_index().sort_values(input.breakdown())
+        df["Area Type"] = df["Subarea Type"].str.replace(".*;(.*);.*", "\\1", regex = True)
+        df["Subarea Type"] = df["Subarea Type"].str.replace(".*;", "", regex = True)
+        return go.Figure(
+            data = [
+                go.Bar(
+                    x = df.loc[(df["Area Type"] == row["Area Type"]) & (df["Subarea Type"] == row["Subarea Type"]), input.breakdown()],
+                    y = df.loc[(df["Area Type"] == row["Area Type"]) & (df["Subarea Type"] == row["Subarea Type"]), "Subarea Area"],
+                    name = row["Subarea Type"],
+                    legendgroup = row["Area Type"],
+                    legendgrouptitle_text = row["Area Type"]
+                    )
+                for i, row in df[["Area Type", "Subarea Type"]].drop_duplicates().iterrows()],
+            layout = go.Layout(
+                barmode = "stack"
+                )
+            )
     
+    #ORDER AREA TYPES ON AREA, AND SUBAREA TYPES ON LEVEL OF DEGRADATION
+    #FIX MARKERS, COLOURS & HOVERTEMPLATE
+    #FIX LAYOUT
+        
     @render.data_frame
     def projectList():
         return render.DataTable(data()[["Name"]], width = "100%", height = "100%", summary = False)
@@ -181,7 +210,7 @@ if __name__ == "__main__":
 
 #%% TODO
 
-#REORGANISE
+#REORGANISE AND EXPAND LAYOUT
 
     #ADD SELECTED PLOT (PIE OF SELECTED (BY BREAKDOWN) vs. UNSELECTED)
     
@@ -192,3 +221,5 @@ if __name__ == "__main__":
     #ADD SHOWCASE (NO. OF PROJECTS, TOTAL AREA, TOTAL CARBON EMISSIONS)
     
 #INFO BUTTON, SPECIFICALLY FOR CARBON PATHWAY
+
+#SPEED OPTIMISATION
