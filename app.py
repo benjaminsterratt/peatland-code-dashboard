@@ -21,6 +21,35 @@ CHOICES = {column: list(DATA[column].sort_values().unique()) for column in GROUP
 
 COLOUR_PALETTE = {column: {(CHOICES[column] + ["Other"])[i]: co.DEFAULT_PLOTLY_COLORS[i % len(co.DEFAULT_PLOTLY_COLORS)] for i in range(0, len(CHOICES[column]) + 1)} for column in GROUPING_COLUMNS}
 
+AREA_COLOUR_PALETTE = {
+    "Blanket Bog": {
+        "Near Natural": "rgba(31, 119, 180, 0.3)",
+        "Modified": "rgba(31, 119, 180, 0.5)",
+        "Drained: Hagg/Gully": "rgba(31, 119, 180, 0.7)",
+        "Drained: Artificial": "rgba(31, 119, 180, 0.7)",
+        "Actively Eroding: Flat Bare": "rgba(31, 119, 180, 0.9)",
+        "Actively Eroding: Hagg/Gully": "rgba(31, 119, 180, 0.9)"
+        },
+    "Raised Bog": {
+        "Near Natural": "rgba(255, 127, 14, 0.3)",
+        "Modified": "rgba(255, 127, 14, 0.5)",
+        "Drained: Hagg/Gully": "rgba(255, 127, 14, 0.7)",
+        "Drained: Artificial": "rgba(255, 127, 14, 0.7)",
+        "Actively Eroding: Flat Bare": "rgba(255, 127, 14, 0.9)",
+        "Actively Eroding: Hagg/Gully": "rgba(255, 127, 14, 0.9)"
+        },
+    "Fen": {
+        "Modified": "rgba(44, 160, 44, 0.9)"
+        },
+    "Grassland": {
+        "Extensive Drained": "rgba(214, 39, 40, 0.9)",
+        "Intensive Drained": "rgba(214, 39, 40, 0.7)"
+        },
+    "Cropland": {
+        "Drained": "rgba(148, 103, 189, 0.9)"
+        }
+    }
+
 #%% FUNCTIONS
 
 def orderAndTruncateBreakdown(df, breakdown, order, truncate = 5):
@@ -177,28 +206,33 @@ def server(input, output, session):
         df = df.melt(input.breakdown(), [column for column in df.columns if column.startswith("Subarea")], "Subarea Type", "Subarea Area")
         df, order = orderAndTruncateBreakdown(df, input.breakdown(), "Subarea Area")
         df[input.breakdown()] = df[input.breakdown()].astype(pd.CategoricalDtype(order, ordered = True))
-        df = df.groupby(["Subarea Type", input.breakdown()], observed = True)["Subarea Area"].sum().reset_index().sort_values(input.breakdown())
-        df["Area Type"] = df["Subarea Type"].str.replace(".*;(.*);.*", "\\1", regex = True)
-        df["Subarea Type"] = df["Subarea Type"].str.replace(".*;", "", regex = True)
+        df["Area Type"] = df["Subarea Type"].str.replace(".*; (.*);.*", "\\1", regex = True)
+        df["Area Type"] = df["Area Type"].astype(pd.CategoricalDtype(df.groupby("Area Type")["Subarea Area"].sum().reset_index().sort_values("Subarea Area")["Area Type"].to_list(), ordered = True))
+        df["Subarea Type"] = df["Subarea Type"].str.replace(".*; ", "", regex = True).astype(pd.CategoricalDtype(['Near Natural', 'Modified', 'Drained: Hagg/Gully', 'Drained: Artificial', 'Extensive Drained', 'Intensive Drained', 'Drained', 'Actively Eroding: Flat Bare', 'Actively Eroding: Hagg/Gully'], ordered = True))
+        df = df.groupby([input.breakdown(), "Area Type", "Subarea Type"], observed = True)["Subarea Area"].sum().reset_index().sort_values(input.breakdown())
         return go.Figure(
             data = [
                 go.Bar(
-                    x = df.loc[(df["Area Type"] == row["Area Type"]) & (df["Subarea Type"] == row["Subarea Type"]), input.breakdown()],
-                    y = df.loc[(df["Area Type"] == row["Area Type"]) & (df["Subarea Type"] == row["Subarea Type"]), "Subarea Area"],
+                    x = df.loc[(df["Area Type"] == row["Area Type"]) & (df["Subarea Type"] == row["Subarea Type"]), "Subarea Area"],
+                    y = df.loc[(df["Area Type"] == row["Area Type"]) & (df["Subarea Type"] == row["Subarea Type"]), input.breakdown()],
+                    orientation = "h",
                     name = row["Subarea Type"],
                     legendgroup = row["Area Type"],
-                    legendgrouptitle_text = row["Area Type"]
+                    legendgrouptitle_text = row["Area Type"],
+                    marker = {"color": AREA_COLOUR_PALETTE[row["Area Type"]][row["Subarea Type"]]},
+                    hovertemplate = str(row["Area Type"]) + "<br>" + str(row["Subarea Type"]) + " : %{x:.3s}<extra></extra>"
                     )
-                for i, row in df[["Area Type", "Subarea Type"]].drop_duplicates().iterrows()],
+                for i, row in df[["Area Type", "Subarea Type"]].drop_duplicates().sort_values(["Area Type", "Subarea Type"], ascending = False).iterrows()],
             layout = go.Layout(
-                barmode = "stack"
+                xaxis = {"title_text": "Area (ha)"},
+                yaxis = {"title_text": input.breakdown()},
+                barmode = "stack",
+                margin = {"l": 0, "r": 0, "t": 28, "b": 0},
+                modebar = {"remove": ["select2d", "lasso2d", "autoScale2d"]},
+                template = "plotly_white"
                 )
             )
-    
-    #ORDER AREA TYPES ON AREA, AND SUBAREA TYPES ON LEVEL OF DEGRADATION
-    #FIX MARKERS, COLOURS & HOVERTEMPLATE
-    #FIX LAYOUT
-        
+            
     @render.data_frame
     def projectList():
         return render.DataTable(data()[["Name"]], width = "100%", height = "100%", summary = False)
@@ -212,12 +246,10 @@ if __name__ == "__main__":
 
 #REORGANISE AND EXPAND LAYOUT
 
-    #ADD SELECTED PLOT (PIE OF SELECTED (BY BREAKDOWN) vs. UNSELECTED)
+    #ADD CARD WITH TABS: SELECTED PLOT (PIE OF SELECTED (BY BREAKDOWN) vs. UNSELECTED) / DISTRIBUTION PLOT AS RIDGELINE (AREA, DURATION, CARBON EMISSIONS)
     
     #ADD AREA PLOT AS GROUPED (AREA TYPE) + STACKED (AREA SUB-TYPE) BAR (BREAKDOWN) CHART
     
-    #DISTRIBUTION PLOT AS RIDGELINE (AREA, DURATION, CARBON EMISSIONS)
-
     #ADD SHOWCASE (NO. OF PROJECTS, TOTAL AREA, TOTAL CARBON EMISSIONS)
     
 #INFO BUTTON, SPECIFICALLY FOR CARBON PATHWAY
