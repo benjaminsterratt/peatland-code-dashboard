@@ -131,15 +131,15 @@ userInterface = ui.page_sidebar(
         ui.layout_columns(
             ui.card(
                 ui.card_header("Carbon Pathway"),
-                output_widget("carbonPathway")
-                ),
+                output_widget("carbonPathway"),
+                full_screen = True),
             ui.card(
-                ui.card_header("Key Statistics")
-                ),
+                ui.card_header("Key Statistics"),
+                full_screen = True),
             ui.card(
                 ui.card_header("Area Breakdown"),
-                output_widget("areaBreakdown")
-                ),
+                output_widget("areaBreakdown"),
+                full_screen = True),
             col_widths = [12, 6, 6]),
         ui.navset_card_pill(
             ui.nav_panel("List",
