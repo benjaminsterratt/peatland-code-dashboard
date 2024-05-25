@@ -1,5 +1,6 @@
 from shiny import module, ui, reactive, render, App, run_app
 from shinywidgets import output_widget, render_widget
+from faicons import icon_svg
 
 import pandas as pd
 
@@ -110,45 +111,107 @@ def filter_server(input, output, session, choices, resetInput = None):
             
     return input.filter
 
+#%%% VALUE BOXES
+
+@module.ui
+def valueBoxes_ui(highlight = None):
+    theme = [None, None, None]
+    if highlight is not None:
+        theme[highlight - 1] = "primary"
+    return ui.layout_columns(
+        ui.value_box("Projects", "0", "peatland restoration projects.", theme = theme[0], showcase = icon_svg("arrow-up-from-ground-water")),
+        ui.value_box("Area", "0 ha", "of peatland set for restoration.", theme = theme[1], showcase = icon_svg("ruler-combined")),
+        ui.value_box("Carbon", "0 tCO₂e", "of predicted claimable emission reductions.", theme = theme[2], showcase = icon_svg("temperature-arrow-down"))
+        )
+
 #%% UI
 
-userInterface = ui.page_sidebar(
-    ui.sidebar(
-        ui.accordion(
-            ui.accordion_panel("Breakdown",
-                               ui.input_radio_buttons("breakdown", None, GROUPING_COLUMNS),
-                               ),
-            ui.accordion_panel("Filters",
-                               ui.input_action_button("resetFilters", "Reset filters", style = "margin-left: 20px; margin-right: 20px; margin-bottom: 32px;"),
-                               ui.accordion(
-                                   *[filter_ui(column.replace(" ", "_"), CHOICES[column], column) for column in GROUPING_COLUMNS],
-                                   open = False)
-                               ),
-            open = True),
-        width = 420, title = "Peatland Code Dashboard"),
-    ui.head_content(ui.tags.style(".plotly-notifier {display: none;}", method = "inline")),
-    ui.layout_columns(
+userInterface = ui.page_navbar(
+    ui.nav_spacer(),
+    ui.nav_panel(
+        #SHOWCASE
+        #BREAKDOWN (HORIZONTAL PROJECT BREAKDOWN) -> LINK TO PROJECT TAB
+        #AREA SUNBURST (NON-BREAKDOWN) -> LINK TO AREA TAB
+        #CARBON PATHWAY (NON-BREAKDOWN) -> LINK TO CARBON TAB
+        #PROJECTS MAP (NON-BREAKDOWN) -> LINK TO MAP TAB
+        "Overview",
         ui.layout_columns(
+            valueBoxes_ui("valueBoxes_overview"),
+            ui.layout_columns(
+                ui.layout_columns(
+                    ui.card(),
+                    ui.card(),
+                    ui.card(),
+                    col_widths = [12, 6, 6], row_heights = [3, 4]),
+                ui.card(),
+                col_widths = [8, 4]),
+            col_widths = [12, 12], row_heights = [2, 7])
+        ),
+    ui.nav_panel(
+        #SHOWCASE: PROJECTS HIGHLIGHTED
+        #DURATION DISTRIBUTION PLOT
+        #SELECTED PROJECTS PLOT
+        "Projects",
+        ui.layout_columns(
+            valueBoxes_ui("valueBoxes_projects", 1),
+            ui.card(),
+            ui.card(),
+            col_widths = [12, 8, 4], row_heights = [2, 7])
+        ),
+    ui.nav_panel(
+        #SHOWCASE: AREA HIGHLIGHTED
+        #AREA DISTRIBUTION PLOT
+        #AREA BREAKDOWN
+        "Area",
+        ui.layout_columns(
+            valueBoxes_ui("valueBoxes_area", 2),
             ui.card(
-                ui.card_header("Carbon Pathway"),
-                output_widget("carbonPathway"),
-                full_screen = True),
-            ui.card(
-                ui.card_header("Key Statistics"),
-                full_screen = True),
-            ui.card(
-                ui.card_header("Area Breakdown"),
+                ui.card_header("Breakdown"),
                 output_widget("areaBreakdown"),
                 full_screen = True),
-            col_widths = [12, 6, 6]),
+            ui.card(),
+            col_widths = [12, 8, 4], row_heights = [2, 7])
+        ),
+    ui.nav_panel(
+        #SHOWCASE: CARBON HIGHLIGHTED
+        #CARBON DISTRIBUTION PLOT
+        #CARBON PATHWAY
+        "Carbon",
+        ui.layout_columns(
+            valueBoxes_ui("valueBoxes_carbon", 3),
+            ui.card(
+                ui.card_header("Pathway"),
+                output_widget("carbonPathway"),
+                full_screen = True),
+            ui.card(),
+            col_widths = [12, 8, 4], row_heights = [2, 7])
+        ),
+    ui.nav_panel(
+        "Map",
         ui.navset_card_pill(
             ui.nav_panel("List",
                          ui.output_data_frame("projectList")
                          ),
             ui.nav_panel("Map"),
-            title = "Projects"),
-        col_widths = [8, 4]),
-    fillable = True)
+            title = "Projects")
+        ),
+    title = "Peatland Code Dashboard",
+    sidebar = ui.sidebar(
+            ui.accordion(
+                ui.accordion_panel("Breakdown",
+                                   ui.input_radio_buttons("breakdown", None, GROUPING_COLUMNS),
+                                   ),
+                ui.accordion_panel("Filters",
+                                   ui.input_action_button("resetFilters", "Reset filters", style = "margin-left: 20px; margin-right: 20px; margin-bottom: 32px;"),
+                                   ui.accordion(
+                                       *[filter_ui(column.replace(" ", "_"), CHOICES[column], column) for column in GROUPING_COLUMNS],
+                                       open = False)
+                                   ),
+                open = True),
+            width = 420),
+    fillable = True,
+    header = ui.head_content(ui.tags.style(".plotly-notifier {display: none;}", method = "inline"))
+    )
 
 #%% SERVER
 
@@ -227,6 +290,8 @@ def server(input, output, session):
                 xaxis = {"title_text": "Area (ha)"},
                 yaxis = {"title_text": input.breakdown()},
                 barmode = "stack",
+                legend = {"orientation": "h",
+                          "yref": "container"},
                 margin = {"l": 0, "r": 0, "t": 28, "b": 0},
                 modebar = {"remove": ["select2d", "lasso2d", "autoScale2d"]},
                 template = "plotly_white"
