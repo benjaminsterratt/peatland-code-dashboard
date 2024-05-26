@@ -53,6 +53,17 @@ AREA_COLOUR_PALETTE = {
 
 #%% FUNCTIONS
 
+def formatNumber(number):
+    if number >= 10**6 - 500:
+        number = number / 10**6
+        suffix = "m"
+    elif number >= 10**3:
+        number = number / 10**3
+        suffix = "k"
+    else:
+        suffix = ""
+    return f"{number:.3g}{suffix}"
+
 def orderAndTruncateBreakdown(df, breakdown, order, truncate = 5):
     order = df.groupby(breakdown, observed = True)[order].sum().sort_values(ascending = False).reset_index()[breakdown].to_list()
     if len(order) > truncate:
@@ -119,10 +130,25 @@ def valueBoxes_ui(highlight = None):
     if highlight is not None:
         theme[highlight - 1] = "primary"
     return ui.layout_columns(
-        ui.value_box("Projects", "0", "peatland restoration projects.", theme = theme[0], showcase = icon_svg("arrow-up-from-ground-water")),
-        ui.value_box("Area", "0 ha", "of peatland set for restoration.", theme = theme[1], showcase = icon_svg("ruler-combined")),
-        ui.value_box("Carbon", "0 tCO₂e", "of predicted claimable emission reductions.", theme = theme[2], showcase = icon_svg("temperature-arrow-down"))
+        ui.value_box("Projects", ui.output_text("updateProjects"), "peatland restoration projects.", theme = theme[0], showcase = icon_svg("arrow-up-from-ground-water")),
+        ui.value_box("Area", ui.output_text("updateArea"), "of peatland set for restoration.", theme = theme[1], showcase = icon_svg("ruler-combined")),
+        ui.value_box("Carbon", ui.output_text("updateCarbon"), "of predicted claimable emission reductions.", theme = theme[2], showcase = icon_svg("temperature-arrow-down"))
         )
+
+@module.server
+def valueBoxes_server(input, output, session, data):
+        
+    @render.text
+    def updateProjects():
+        return formatNumber(len(data()))
+
+    @render.text
+    def updateArea():
+        return formatNumber((data()["Area"].sum())) + " ha"
+    
+    @render.text
+    def updateCarbon():
+        return formatNumber(data()["Claimable Emission Reductions"].sum()) + " tCO₂e"
 
 #%% UI
 
@@ -227,6 +253,9 @@ def server(input, output, session):
         for column in filters:
             data = data[data[column].isin(filters[column]())]
         return data
+    
+    for page in ["overview", "projects", "area", "carbon"]:
+        valueBoxes_server("valueBoxes_" + page, data)
     
     @render_widget
     def carbonPathway():
