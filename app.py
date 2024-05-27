@@ -16,12 +16,6 @@ DATA["Status"] = DATA["Status"].astype(pd.CategoricalDtype(["Under Development",
 
 GROUPING_COLUMNS = ["Country", "Status", "PIU Issuance", "Developer", "Validator"]
 
-#%% PRE-PROCESSING
-
-CHOICES = {column: list(DATA[column].sort_values().unique()) for column in GROUPING_COLUMNS}
-
-COLOUR_PALETTE = {column: {(CHOICES[column] + ["Other"])[i]: co.DEFAULT_PLOTLY_COLORS[i % len(co.DEFAULT_PLOTLY_COLORS)] for i in range(0, len(CHOICES[column]) + 1)} for column in GROUPING_COLUMNS}
-
 AREA_COLOUR_PALETTE = {
     "Blanket Bog": {
         "Near Natural": "rgba(31, 119, 180, 0.3)",
@@ -50,6 +44,12 @@ AREA_COLOUR_PALETTE = {
         "Drained": "rgba(148, 103, 189, 0.9)"
         }
     }
+
+#%% PRE-PROCESSING
+
+CHOICES = {column: list(DATA[column].sort_values().unique()) for column in GROUPING_COLUMNS}
+
+COLOUR_PALETTE = {column: {(CHOICES[column] + ["Other"])[i]: co.DEFAULT_PLOTLY_COLORS[i % len(co.DEFAULT_PLOTLY_COLORS)] for i in range(0, len(CHOICES[column]) + 1)} for column in GROUPING_COLUMNS}
 
 #%% FUNCTIONS
 
@@ -155,39 +155,35 @@ def valueBoxes_server(input, output, session, data):
 userInterface = ui.page_navbar(
     ui.nav_spacer(),
     ui.nav_panel(
-        #SHOWCASE
-        #BREAKDOWN (HORIZONTAL PROJECT BREAKDOWN) -> LINK TO PROJECT TAB
+        #PROJECTS MAP (NON-BREAKDOWN) -> LINK TO PROJECTS TAB
         #AREA SUNBURST (NON-BREAKDOWN) -> LINK TO AREA TAB
         #CARBON PATHWAY (NON-BREAKDOWN) -> LINK TO CARBON TAB
-        #PROJECTS MAP (NON-BREAKDOWN) -> LINK TO MAP TAB
         "Overview",
         ui.layout_columns(
             valueBoxes_ui("valueBoxes_overview"),
-            ui.layout_columns(
-                ui.layout_columns(
-                    ui.card(),
-                    ui.card(),
-                    ui.card(),
-                    col_widths = [12, 6, 6], row_heights = [3, 4]),
-                ui.card(),
-                col_widths = [8, 4]),
-            col_widths = [12, 12], row_heights = [2, 7])
+            ui.card(),
+            ui.card(),
+            ui.card(),
+            col_widths = [12, 4, 4, 4], row_heights = [2, 7])
         ),
     ui.nav_panel(
-        #SHOWCASE: PROJECTS HIGHLIGHTED
-        #DURATION DISTRIBUTION PLOT
-        #SELECTED PROJECTS PLOT
+        #PROJECT LIST/MAP
+        #SELECTED PROJECT INFORMATION + PLOTS
         "Projects",
         ui.layout_columns(
             valueBoxes_ui("valueBoxes_projects", 1),
+            ui.navset_card_pill(
+                ui.nav_panel("List",
+                             ui.output_data_frame("projectList")
+                             ),
+                ui.nav_panel("Map"),
+                title = "Projects"),
             ui.card(),
-            ui.card(),
-            col_widths = [12, 8, 4], row_heights = [2, 7])
+        col_widths = [12, 6, 6], row_heights = [2, 7])
         ),
     ui.nav_panel(
-        #SHOWCASE: AREA HIGHLIGHTED
-        #AREA DISTRIBUTION PLOT
         #AREA BREAKDOWN
+        #AREA DISTRIBUTION PLOT
         "Area",
         ui.layout_columns(
             valueBoxes_ui("valueBoxes_area", 2),
@@ -199,9 +195,8 @@ userInterface = ui.page_navbar(
             col_widths = [12, 8, 4], row_heights = [2, 7])
         ),
     ui.nav_panel(
-        #SHOWCASE: CARBON HIGHLIGHTED
-        #CARBON DISTRIBUTION PLOT
         #CARBON PATHWAY
+        #CARBON DISTRIBUTION PLOT
         "Carbon",
         ui.layout_columns(
             valueBoxes_ui("valueBoxes_carbon", 3),
@@ -212,23 +207,15 @@ userInterface = ui.page_navbar(
             ui.card(),
             col_widths = [12, 8, 4], row_heights = [2, 7])
         ),
-    ui.nav_panel(
-        "Map",
-        ui.navset_card_pill(
-            ui.nav_panel("List",
-                         ui.output_data_frame("projectList")
-                         ),
-            ui.nav_panel("Map"),
-            title = "Projects")
-        ),
     title = "Peatland Code Dashboard",
     sidebar = ui.sidebar(
+            # output_widget("simpleProjectBreakdown"),
             ui.accordion(
                 ui.accordion_panel("Breakdown",
                                    ui.input_radio_buttons("breakdown", None, GROUPING_COLUMNS),
                                    ),
                 ui.accordion_panel("Filters",
-                                   ui.input_action_button("resetFilters", "Reset filters", style = "margin-left: 20px; margin-right: 20px; margin-bottom: 32px;"),
+                                   ui.output_ui("resetFilters"),
                                    ui.accordion(
                                        *[filter_ui(column.replace(" ", "_"), CHOICES[column], column) for column in GROUPING_COLUMNS],
                                        open = False)
@@ -243,19 +230,84 @@ userInterface = ui.page_navbar(
 
 def server(input, output, session):
 
+    #%%% SIDEBAR    
+
     filters = {}
     for column in GROUPING_COLUMNS:
         filters[column] = filter_server(column.replace(" ", "_"), CHOICES[column], input.resetFilters)
-        
+    
+    enableResetFilter = reactive.value(False)
+    
     @reactive.calc
     def data():
         data = DATA.copy()
+        filtered = False
         for column in filters:
-            data = data[data[column].isin(filters[column]())]
+            selected = filters[column]()
+            if len(selected) != len(CHOICES[column]):
+                filtered = True
+                data = data[data[column].isin(selected)]
+        enableResetFilter.set(filtered)
         return data
+    
+    @render.ui
+    def resetFilters():
+        if enableResetFilter.get():
+            return ui.input_action_button("resetFilters", "Reset filters", style = "margin-bottom: 16px;")
+        else:
+            return ui.input_action_button("resetFilters", "Reset filters", style = "margin-bottom: 16px;", disabled = "")
+
+    # @render.widget
+    # def simpleProjectBreakdown():
+    #     pass
     
     for page in ["overview", "projects", "area", "carbon"]:
         valueBoxes_server("valueBoxes_" + page, data)
+        
+    #%%% PROJECTS
+    
+    @render.data_frame
+    def projectList():
+        return render.DataTable(data()[["Name"]], width = "100%", height = "100%", summary = False)
+    
+    #%%% AREA
+    
+    @render_widget
+    def areaBreakdown():
+        df = data().copy()
+        df = df.melt(input.breakdown(), [column for column in df.columns if column.startswith("Subarea")], "Subarea Type", "Subarea Area")
+        df, order = orderAndTruncateBreakdown(df, input.breakdown(), "Subarea Area")
+        df[input.breakdown()] = df[input.breakdown()].astype(pd.CategoricalDtype(order, ordered = True))
+        df["Area Type"] = df["Subarea Type"].str.replace(".*; (.*);.*", "\\1", regex = True)
+        df["Area Type"] = df["Area Type"].astype(pd.CategoricalDtype(df.groupby("Area Type")["Subarea Area"].sum().reset_index().sort_values("Subarea Area")["Area Type"].to_list(), ordered = True))
+        df["Subarea Type"] = df["Subarea Type"].str.replace(".*; ", "", regex = True).astype(pd.CategoricalDtype(['Near Natural', 'Modified', 'Drained: Hagg/Gully', 'Drained: Artificial', 'Extensive Drained', 'Intensive Drained', 'Drained', 'Actively Eroding: Flat Bare', 'Actively Eroding: Hagg/Gully'], ordered = True))
+        df = df.groupby([input.breakdown(), "Area Type", "Subarea Type"], observed = True)["Subarea Area"].sum().reset_index().sort_values(input.breakdown())
+        return go.Figure(
+            data = [
+                go.Bar(
+                    x = df.loc[(df["Area Type"] == row["Area Type"]) & (df["Subarea Type"] == row["Subarea Type"]), "Subarea Area"],
+                    y = df.loc[(df["Area Type"] == row["Area Type"]) & (df["Subarea Type"] == row["Subarea Type"]), input.breakdown()],
+                    orientation = "h",
+                    name = row["Subarea Type"],
+                    legendgroup = row["Area Type"],
+                    legendgrouptitle_text = row["Area Type"],
+                    marker = {"color": AREA_COLOUR_PALETTE[row["Area Type"]][row["Subarea Type"]]},
+                    hovertemplate = str(row["Area Type"]) + "<br>" + str(row["Subarea Type"]) + " : %{x:.3s}<extra></extra>"
+                    )
+                for i, row in df[["Area Type", "Subarea Type"]].drop_duplicates().sort_values(["Area Type", "Subarea Type"], ascending = False).iterrows()],
+            layout = go.Layout(
+                xaxis = {"title_text": "Area (ha)"},
+                yaxis = {"title_text": input.breakdown()},
+                barmode = "stack",
+                legend = {"orientation": "h",
+                          "yref": "container"},
+                margin = {"l": 0, "r": 0, "t": 28, "b": 0},
+                modebar = {"remove": ["select2d", "lasso2d", "autoScale2d"]},
+                template = "plotly_white"
+                )
+            )
+    
+    #%%% CARBON
     
     @render_widget
     def carbonPathway():
@@ -292,44 +344,7 @@ def server(input, output, session):
                 )
             )
     
-    @render_widget
-    def areaBreakdown():
-        df = data().copy()
-        df = df.melt(input.breakdown(), [column for column in df.columns if column.startswith("Subarea")], "Subarea Type", "Subarea Area")
-        df, order = orderAndTruncateBreakdown(df, input.breakdown(), "Subarea Area")
-        df[input.breakdown()] = df[input.breakdown()].astype(pd.CategoricalDtype(order, ordered = True))
-        df["Area Type"] = df["Subarea Type"].str.replace(".*; (.*);.*", "\\1", regex = True)
-        df["Area Type"] = df["Area Type"].astype(pd.CategoricalDtype(df.groupby("Area Type")["Subarea Area"].sum().reset_index().sort_values("Subarea Area")["Area Type"].to_list(), ordered = True))
-        df["Subarea Type"] = df["Subarea Type"].str.replace(".*; ", "", regex = True).astype(pd.CategoricalDtype(['Near Natural', 'Modified', 'Drained: Hagg/Gully', 'Drained: Artificial', 'Extensive Drained', 'Intensive Drained', 'Drained', 'Actively Eroding: Flat Bare', 'Actively Eroding: Hagg/Gully'], ordered = True))
-        df = df.groupby([input.breakdown(), "Area Type", "Subarea Type"], observed = True)["Subarea Area"].sum().reset_index().sort_values(input.breakdown())
-        return go.Figure(
-            data = [
-                go.Bar(
-                    x = df.loc[(df["Area Type"] == row["Area Type"]) & (df["Subarea Type"] == row["Subarea Type"]), "Subarea Area"],
-                    y = df.loc[(df["Area Type"] == row["Area Type"]) & (df["Subarea Type"] == row["Subarea Type"]), input.breakdown()],
-                    orientation = "h",
-                    name = row["Subarea Type"],
-                    legendgroup = row["Area Type"],
-                    legendgrouptitle_text = row["Area Type"],
-                    marker = {"color": AREA_COLOUR_PALETTE[row["Area Type"]][row["Subarea Type"]]},
-                    hovertemplate = str(row["Area Type"]) + "<br>" + str(row["Subarea Type"]) + " : %{x:.3s}<extra></extra>"
-                    )
-                for i, row in df[["Area Type", "Subarea Type"]].drop_duplicates().sort_values(["Area Type", "Subarea Type"], ascending = False).iterrows()],
-            layout = go.Layout(
-                xaxis = {"title_text": "Area (ha)"},
-                yaxis = {"title_text": input.breakdown()},
-                barmode = "stack",
-                legend = {"orientation": "h",
-                          "yref": "container"},
-                margin = {"l": 0, "r": 0, "t": 28, "b": 0},
-                modebar = {"remove": ["select2d", "lasso2d", "autoScale2d"]},
-                template = "plotly_white"
-                )
-            )
-            
-    @render.data_frame
-    def projectList():
-        return render.DataTable(data()[["Name"]], width = "100%", height = "100%", summary = False)
+#%% APP
 
 app = App(userInterface, server)
 
