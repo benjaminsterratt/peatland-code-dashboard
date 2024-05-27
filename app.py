@@ -56,7 +56,7 @@ COLOUR_PALETTE = {column: {(CHOICES[column] + ["Other"])[i]: co.DEFAULT_PLOTLY_C
 def formatNumber(number):
     if number >= 10**6 - 500:
         number = number / 10**6
-        suffix = "m"
+        suffix = "M"
     elif number >= 10**3:
         number = number / 10**3
         suffix = "k"
@@ -209,7 +209,7 @@ userInterface = ui.page_navbar(
         ),
     title = "Peatland Code Dashboard",
     sidebar = ui.sidebar(
-            # output_widget("simpleProjectBreakdown"),
+            output_widget("simpleProjectBreakdown"),
             ui.accordion(
                 ui.accordion_panel("Breakdown",
                                    ui.input_radio_buttons("breakdown", None, GROUPING_COLUMNS),
@@ -223,7 +223,7 @@ userInterface = ui.page_navbar(
                 open = True),
             width = 420),
     fillable = True,
-    header = ui.head_content(ui.tags.style(".plotly-notifier {display: none;}", method = "inline"))
+    header = ui.head_content(ui.include_css("app.css"))
     )
 
 #%% SERVER
@@ -257,9 +257,35 @@ def server(input, output, session):
         else:
             return ui.input_action_button("resetFilters", "Reset filters", style = "margin-bottom: 16px;", disabled = "")
 
-    # @render.widget
-    # def simpleProjectBreakdown():
-    #     pass
+    @render_widget
+    def simpleProjectBreakdown():
+        df = data().copy()
+        df["Projects"] = 1
+        df, order = orderAndTruncateBreakdown(df, input.breakdown(), "Projects")
+        df = df.groupby(input.breakdown())["Projects"].sum().reset_index()
+        return go.Figure(
+            data = [
+                go.Bar(
+                    x = df.loc[df[input.breakdown()] == value, "Projects"],
+                    orientation = "h",
+                    name = value
+                    )
+                for value in order],
+            layout = go.Layout(
+                xaxis = {"fixedrange": True, "showgrid": False, "range": [0, df["Projects"].sum()]},                
+                yaxis = {"fixedrange": True, "showgrid": False},
+                barmode = "stack",
+                bargap = 0,
+                showlegend = False,
+                margin = {"autoexpand": False, "l": 0, "r": 0, "t": 0, "b": 0},
+                template = "plotly_white",
+                height = 47
+                )
+            )
+    
+    #COLOURS
+    #ADD UNSELECTED (SAME COLOURS W/ OPACITY)
+    #HOVERTEXT
     
     for page in ["overview", "projects", "area", "carbon"]:
         valueBoxes_server("valueBoxes_" + page, data)
