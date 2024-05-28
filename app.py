@@ -259,20 +259,32 @@ def server(input, output, session):
 
     @render_widget
     def simpleProjectBreakdown():
-        df = data().copy()
-        df["Projects"] = 1
-        df, order = orderAndTruncateBreakdown(df, input.breakdown(), "Projects")
-        df = df.groupby(input.breakdown())["Projects"].sum().reset_index()
+        df_unselected = DATA.copy()
+        df_unselected["Unselected"] = 1
+        df_unselected, order = orderAndTruncateBreakdown(df_unselected, input.breakdown(), "Unselected")
+        df_unselected = df_unselected.groupby(input.breakdown(), observed = True)["Unselected"].sum().reset_index()
+        df_unselected[input.breakdown()] = df_unselected[input.breakdown()].astype(pd.CategoricalDtype(order, ordered = True))
+        df_selected = data().copy()
+        df_selected["Selected"] = 1
+        if "Other" in order:
+            df_selected[input.breakdown()] = df_selected[input.breakdown()].where(df_selected[input.breakdown()].isin(order), "Other")        
+        df_selected = df_selected.groupby(input.breakdown(), observed = True)["Selected"].sum().reset_index()
+        df_selected[input.breakdown()] = df_selected[input.breakdown()].astype(pd.CategoricalDtype(order, ordered = True))
+        df = pd.merge(df_selected, df_unselected, "outer", input.breakdown())
+        df["Selected"] = df["Selected"].fillna(0)
+        df["Unselected"] = df["Unselected"] - df["Selected"]
+        df = df.melt(input.breakdown(), ["Selected", "Unselected"], "Selection Status", "Count")
+        df = pd.concat([df.loc[df["Selection Status"] == "Selected"].sort_values(input.breakdown()), df.loc[df["Selection Status"] == "Unselected"].sort_values(input.breakdown(), ascending = False)])
         return go.Figure(
             data = [
                 go.Bar(
-                    x = df.loc[df[input.breakdown()] == value, "Projects"],
+                    x = [row["Count"]],
                     orientation = "h",
-                    name = value
+                    marker = {"color": COLOUR_PALETTE[input.breakdown()][row[input.breakdown()]], "pattern_shape": ["" if row["Selection Status"] == "Selected" else "/"], "pattern_fgcolor": "black"}
                     )
-                for value in order],
+                for i, row in df.iterrows()],
             layout = go.Layout(
-                xaxis = {"fixedrange": True, "showgrid": False, "range": [0, df["Projects"].sum()]},                
+                xaxis = {"fixedrange": True, "showgrid": False, "range": [0, df["Count"].sum()]},                
                 yaxis = {"fixedrange": True, "showgrid": False},
                 barmode = "stack",
                 bargap = 0,
@@ -283,8 +295,8 @@ def server(input, output, session):
                 )
             )
     
-    #COLOURS
-    #ADD UNSELECTED (SAME COLOURS W/ OPACITY)
+    #TITLE
+    #NUMBER IN BAR/AXIS
     #HOVERTEXT
     
     for page in ["overview", "projects", "area", "carbon"]:
