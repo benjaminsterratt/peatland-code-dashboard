@@ -280,24 +280,22 @@ def server(input, output, session):
                 go.Bar(
                     x = [row["Count"]],
                     orientation = "h",
-                    marker = {"color": COLOUR_PALETTE[input.breakdown()][row[input.breakdown()]], "pattern_shape": ["" if row["Selection Status"] == "Selected" else "/"], "pattern_fgcolor": "black"}
+                    marker = {"color": COLOUR_PALETTE[input.breakdown()][row[input.breakdown()]], "pattern_shape": ["" if row["Selection Status"] == "Selected" else "/"], "pattern_fgcolor": "black"},
+                    hovertemplate = "<b>" + str(row["Selection Status"]) + "</b><br><i>" + str(row[input.breakdown()]) + "</i><br>%{x}<extra></extra>",
+                    hoverlabel = {"bgcolor": "white"}
                     )
                 for i, row in df.iterrows()],
             layout = go.Layout(
-                xaxis = {"fixedrange": True, "showgrid": False, "range": [0, df["Count"].sum()]},                
-                yaxis = {"fixedrange": True, "showgrid": False},
+                xaxis = {"fixedrange": True, "visible": False, "range": [0, df["Count"].sum()]},
+                yaxis = {"fixedrange": True, "visible": False},
                 barmode = "stack",
                 bargap = 0,
                 showlegend = False,
-                margin = {"autoexpand": False, "l": 0, "r": 0, "t": 0, "b": 0},
+                margin = {"autoexpand": False, "l": 17, "r": 17, "t": 0, "b": 0},
                 template = "plotly_white",
-                height = 47
+                height = 60
                 )
             )
-    
-    #TITLE
-    #NUMBER IN BAR/AXIS
-    #HOVERTEXT
     
     for page in ["overview", "projects", "area", "carbon"]:
         valueBoxes_server("valueBoxes_" + page, data)
@@ -330,7 +328,8 @@ def server(input, output, session):
                     legendgroup = row["Area Type"],
                     legendgrouptitle_text = row["Area Type"],
                     marker = {"color": AREA_COLOUR_PALETTE[row["Area Type"]][row["Subarea Type"]]},
-                    hovertemplate = str(row["Area Type"]) + "<br>" + str(row["Subarea Type"]) + " : %{x:.3s}<extra></extra>"
+                    hovertemplate = "<b>" + str(row["Area Type"]) + "</b><br><i>" + str(row["Subarea Type"]) + "</i><br>%{x:.3s}<extra></extra>",
+                    hoverlabel = {"bgcolor": "white"}
                     )
                 for i, row in df[["Area Type", "Subarea Type"]].drop_duplicates().sort_values(["Area Type", "Subarea Type"], ascending = False).iterrows()],
             layout = go.Layout(
@@ -390,6 +389,8 @@ if __name__ == "__main__":
     run_app(app)
 
 #%% TODO
+
+#ADD CONTEXT TO SIMPLE PROJECT BREAKDOWN, PERHAPS PIVOT TO VERTICAL TO FIX RELAYOUT ISSUES ON SCROLLBAR APPEAR/DISAPPEAR AND MOVE OUT OF SIDEBAR TO LEFT HAND SIDE OF CONTENT AREA
 
 #REORGANISE AND EXPAND LAYOUT
 
