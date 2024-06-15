@@ -2,6 +2,6 @@
   display: none;
 }
 
-.sidebar-content .modebar {
+.remove-modebar:last-child .modebar {
   display: none;
 }

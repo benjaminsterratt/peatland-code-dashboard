@@ -164,7 +164,8 @@ userInterface = ui.page_navbar(
             ui.card(),
             ui.card(),
             ui.card(),
-            col_widths = [12, 4, 4, 4], row_heights = [2, 7])
+            output_widget("simpleProjectBreakdown"),
+            col_widths = [12, 4, 4, 4, 12], row_heights = [2, 6, 1], class_ = "remove-modebar"),
         ),
     ui.nav_panel(
         #PROJECT LIST/MAP
@@ -209,7 +210,6 @@ userInterface = ui.page_navbar(
         ),
     title = "Peatland Code Dashboard",
     sidebar = ui.sidebar(
-            output_widget("simpleProjectBreakdown"),
             ui.accordion(
                 ui.accordion_panel("Breakdown",
                                    ui.input_radio_buttons("breakdown", None, GROUPING_COLUMNS),
@@ -275,25 +275,29 @@ def server(input, output, session):
         df["Unselected"] = df["Unselected"] - df["Selected"]
         df = df.melt(input.breakdown(), ["Selected", "Unselected"], "Selection Status", "Count")
         df = pd.concat([df.loc[df["Selection Status"] == "Selected"].sort_values(input.breakdown()), df.loc[df["Selection Status"] == "Unselected"].sort_values(input.breakdown(), ascending = False)])
+        df["Base"] = df["Count"].cumsum() - df["Count"]
+        df["Count"] = df["Count"].astype(int)
         return go.Figure(
             data = [
                 go.Bar(
                     x = [row["Count"]],
+                    y = [row["Selection Status"]],
+                    base = [row["Base"]],
                     orientation = "h",
-                    marker = {"color": COLOUR_PALETTE[input.breakdown()][row[input.breakdown()]], "pattern_shape": ["" if row["Selection Status"] == "Selected" else "/"], "pattern_fgcolor": "black"},
-                    hovertemplate = "<b>" + str(row["Selection Status"]) + "</b><br><i>" + str(row[input.breakdown()]) + "</i><br>%{x}<extra></extra>",
+                    marker = {"color": COLOUR_PALETTE[input.breakdown()][row[input.breakdown()]]},
+                    hovertext = [row["Count"]],
+                    hovertemplate = "<b>" + str(row[input.breakdown()]) + "</b><br>%{hovertext}<extra></extra>",
                     hoverlabel = {"bgcolor": "white"}
                     )
                 for i, row in df.iterrows()],
             layout = go.Layout(
-                xaxis = {"fixedrange": True, "visible": False, "range": [0, df["Count"].sum()]},
-                yaxis = {"fixedrange": True, "visible": False},
+                xaxis = {"fixedrange": True, "range": [0, df["Count"].sum()]},
+                yaxis = {"fixedrange": True, "autorange": "reversed"},
                 barmode = "stack",
                 bargap = 0,
                 showlegend = False,
-                margin = {"autoexpand": False, "l": 17, "r": 17, "t": 0, "b": 0},
-                template = "plotly_white",
-                height = 60
+                margin = {"l": 0, "r": 0, "t": 0, "b": 0},
+                template = "plotly_white"
                 )
             )
     
