@@ -55,8 +55,11 @@ COLOUR_PALETTE = {column: {(CHOICES[column] + ["Other"])[i]: co.DEFAULT_PLOTLY_C
 
 #%%% UI
 
-def cardHeader(text, icon, popover):
+def infoCardHeader(text, icon, popover):
     return ui.div(ui.div(text), ui.popover(icon_svg(icon, height = "14.4px", margin_right = "0px"), ui.p(popover), "Data sourced from ", ui.a("UK Peatland Code Registry", href = "https://mer.markit.com/br-reg/public/index.jsp?entity=project&sort=project_name&dir=ASC&start=0&acronym=PCC&limit=15&additionalCertificationId=&categoryId=100000000000001&name=&standardId=100000000000157"), " in May 2024."), style = "display: flex; justify-content: space-between;")
+
+def linkedCardHeader(id, text):
+    return ui.div(ui.div(text), ui.input_action_link(id, "View more"), style = "display: flex; justify-content: space-between;")
 
 #%%% CALCULATION
 
@@ -168,9 +171,15 @@ userInterface = ui.page_navbar(
         "Overview",
         ui.layout_columns(
             valueBoxes_ui("valueBoxes_overview"),
-            ui.card(),
-            ui.card(),
-            ui.card(),
+            ui.card(
+                ui.card_header(linkedCardHeader("link_projects", "Projects"))
+                ),
+            ui.card(
+                ui.card_header(linkedCardHeader("link_area", "Area"))
+                ),
+            ui.card(
+                ui.card_header(linkedCardHeader("link_carbon", "Carbon"))
+                ),
             col_widths = [12, 4, 4, 4], row_heights = [2, 7]),
         ),
     ui.nav_panel(
@@ -187,8 +196,8 @@ userInterface = ui.page_navbar(
                 ui.nav_panel("Map"),
                 title = "Projects"),
             ui.card(),
-        col_widths = [12, 8, 4], row_heights = [2, 7])
-        ),
+        col_widths = [12, 8, 4], row_heights = [2, 7]),
+        value = "projects"),
     ui.nav_panel(
         #AREA BREAKDOWN
         #AREA DISTRIBUTION PLOT
@@ -200,8 +209,8 @@ userInterface = ui.page_navbar(
                 output_widget("areaBreakdown"),
                 full_screen = True),
             ui.card(),
-            col_widths = [12, 8, 4], row_heights = [2, 7])
-        ),
+            col_widths = [12, 8, 4], row_heights = [2, 7]),
+        value = "area"),
     ui.nav_panel(
         #CARBON PATHWAY
         #CARBON & DURATION SCATTER PLOT
@@ -209,13 +218,14 @@ userInterface = ui.page_navbar(
         ui.layout_columns(
             valueBoxes_ui("valueBoxes_carbon", 3),
             ui.card(
-                ui.card_header(cardHeader("Pathway", "circle-question", "Cumulative predicted claimable emission reductions across projects' durations. Projects without start dates assumed to start in 2025.")),
+                ui.card_header(infoCardHeader("Pathway", "circle-question", "Cumulative predicted claimable emission reductions across projects' durations. Projects without start dates assumed to start in 2025.")),
                 output_widget("carbonPathway"),
                 full_screen = True),
             ui.card(),
-            col_widths = [12, 8, 4], row_heights = [2, 7])
-        ),
+            col_widths = [12, 8, 4], row_heights = [2, 7]),
+        value = "carbon"),
     title = "Peatland Code Dashboard",
+    id = "main",
     sidebar = ui.sidebar(
             ui.accordion(
                 ui.accordion_panel("Breakdown",
@@ -263,10 +273,29 @@ def server(input, output, session):
             return ui.input_action_button("resetFilters", "Reset filters", style = "margin-bottom: 16px;")
         else:
             return ui.input_action_button("resetFilters", "Reset filters", style = "margin-bottom: 16px;", disabled = "")
+        
+    #%%% VALUE BOXES
     
     for page in ["overview", "projects", "area", "carbon"]:
         valueBoxes_server("valueBoxes_" + page, data)
         
+    #%%% LINKS
+        
+    @reactive.effect
+    @reactive.event(input.link_projects)
+    def linkProjects():
+        ui.update_navs("main", "projects")
+        
+    @reactive.effect
+    @reactive.event(input.link_area)
+    def linkArea():
+        ui.update_navs("main", "area")
+            
+    @reactive.effect
+    @reactive.event(input.link_carbon)
+    def linkCarbon():
+        ui.update_navs("main", "carbon")
+                
     #%%% PROJECTS
     
     @render.data_frame
