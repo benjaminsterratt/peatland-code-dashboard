@@ -55,8 +55,8 @@ COLOUR_PALETTE = {column: {(CHOICES[column] + ["Other"])[i]: co.DEFAULT_PLOTLY_C
 
 #%%% UI
 
-def infoCardHeader(text, icon, popover):
-    return ui.div(ui.div(text), ui.popover(icon_svg(icon, height = "14.4px", margin_right = "0px"), ui.p(popover), "Data sourced from ", ui.a("UK Peatland Code Registry", href = "https://mer.markit.com/br-reg/public/index.jsp?entity=project&sort=project_name&dir=ASC&start=0&acronym=PCC&limit=15&additionalCertificationId=&categoryId=100000000000001&name=&standardId=100000000000157"), " in May 2024."), style = "display: flex; justify-content: space-between;")
+def infoCardHeader(text, popover):
+    return ui.div(ui.div(text), ui.popover(icon_svg("circle-question", height = "14.4px", margin_right = "0px"), ui.p(popover), "Data sourced from ", ui.a("UK Peatland Code Registry", href = "https://mer.markit.com/br-reg/public/index.jsp?entity=project&sort=project_name&dir=ASC&start=0&acronym=PCC&limit=15&additionalCertificationId=&categoryId=100000000000001&name=&standardId=100000000000157"), " in May 2024."), style = "display: flex; justify-content: space-between;")
 
 def linkedCardHeader(id, text):
     return ui.div(ui.div(text), ui.input_action_link(id, "View more"), style = "display: flex; justify-content: space-between;")
@@ -205,10 +205,13 @@ userInterface = ui.page_navbar(
         ui.layout_columns(
             valueBoxes_ui("valueBoxes_area", 2),
             ui.card(
-                ui.card_header("Breakdown"),
+                ui.card_header(infoCardHeader("Breakdown", "Total area by type and sub-type.")),
                 output_widget("areaBreakdown"),
                 full_screen = True),
-            ui.card(),
+            ui.card(
+                ui.card_header(infoCardHeader("Distribution", "Lorem ipsum...")),
+                output_widget("areaDistribution"),
+                full_screen = True),
             col_widths = [12, 8, 4], row_heights = [2, 7]),
         value = "area"),
     ui.nav_panel(
@@ -218,10 +221,13 @@ userInterface = ui.page_navbar(
         ui.layout_columns(
             valueBoxes_ui("valueBoxes_carbon", 3),
             ui.card(
-                ui.card_header(infoCardHeader("Pathway", "circle-question", "Cumulative predicted claimable emission reductions across projects' durations. Projects without start dates assumed to start in 2025.")),
+                ui.card_header(infoCardHeader("Pathway", "Cumulative predicted claimable emission reductions across projects' durations. Projects without start dates assumed to start in 2025.")),
                 output_widget("carbonPathway"),
                 full_screen = True),
-            ui.card(),
+            ui.card(
+                ui.card_header(infoCardHeader("Distribution", "Projects' duration and predicted claimable emission reductions.")),
+                output_widget("carbonDistribution"),
+                full_screen = True),
             col_widths = [12, 8, 4], row_heights = [2, 7]),
         value = "carbon"),
     title = "Peatland Code Dashboard",
@@ -304,6 +310,8 @@ def server(input, output, session):
     
     #%%% AREA
     
+    #%%%% BREAKDOWN
+    
     @render_widget
     def areaBreakdown():
         df = data().copy()
@@ -324,7 +332,7 @@ def server(input, output, session):
                     legendgroup = row["Area Type"],
                     legendgrouptitle_text = row["Area Type"],
                     marker = {"color": AREA_COLOUR_PALETTE[row["Area Type"]][row["Subarea Type"]]},
-                    hovertemplate = "<b>" + str(row["Area Type"]) + "</b><br><i>" + str(row["Subarea Type"]) + "</i><br>%{x:.3s}<extra></extra>",
+                    hovertemplate = "<b>" + str(row["Area Type"]) + "</b><br><i>" + str(row["Subarea Type"]) + "</i><br>%{x:.3s} ha<extra></extra>",
                     hoverlabel = {"bgcolor": "white"}
                     )
                 for i, row in df[["Area Type", "Subarea Type"]].drop_duplicates().sort_values(["Area Type", "Subarea Type"], ascending = False).iterrows()],
@@ -340,7 +348,15 @@ def server(input, output, session):
                 )
             )
     
+    #%%%% DISTRIBUTION
+    
+    @render_widget
+    def areaDistribution():
+        pass
+    
     #%%% CARBON
+    
+    #%%%% PATHWAY
     
     @render_widget
     def carbonPathway():
@@ -358,14 +374,14 @@ def server(input, output, session):
                     y = df.loc[df[input.breakdown()] == value, "Claimable Emission Reductions"],
                     stackgroup = "default",
                     name = value,
+                    mode = "lines",
                     marker = {"color": COLOUR_PALETTE[input.breakdown()][value]},
-                    hovertemplate = "%{y:.3s}"
+                    hovertemplate = "%{y:.3s} tCO<sub>2</sub>e"
                     )
                 for value in order],
             layout = go.Layout(
                 xaxis = {"title_text": "Year"},
                 yaxis = {"title_text": "Predicted claimable emission reductions (tCO<sub>2</sub>e)"},
-                showlegend = True,
                 legend = {"title_text": input.breakdown(),
                           "traceorder": "normal",
                           "orientation": "h",
@@ -373,6 +389,38 @@ def server(input, output, session):
                 hovermode = "x unified",
                 margin = {"l": 0, "r": 0, "t": 28, "b": 0},
                 modebar = {"remove": "autoScale2d"},
+                template = "plotly_white"
+                )
+            )
+    
+    #%%%% DISTRIBUTION
+    
+    @render_widget
+    def carbonDistribution():
+        df = data().copy()
+        df["Original Breakdown"] = df[input.breakdown()]
+        df, order = orderAndTruncateBreakdown(df, input.breakdown(), "Claimable Emission Reductions")
+        return go.Figure(
+            data = [
+                go.Scatter(
+                    x = df.loc[df[input.breakdown()] == value, "Duration"],
+                    y = df.loc[df[input.breakdown()] == value, "Claimable Emission Reductions"],
+                    name = value,
+                    mode = "markers",
+                    marker = {"color": COLOUR_PALETTE[input.breakdown()][value]},
+                    customdata = df.loc[df[input.breakdown()] == value][["Original Breakdown", "Name"]],
+                    hovertemplate = "<b>%{customdata[0]}</b><br><i>%{customdata[1]}</i><br>%{x:.0f} years<br>%{y:.3s} tCO<sub>2</sub>e<extra></extra>",
+                    hoverlabel = {"bgcolor": "white"}
+                    )
+                for value in order],
+            layout = go.Layout(
+                xaxis = {"title_text": "Duration (years)"},
+                yaxis = {"title_text": "Predicted claimable emission reductions (tCO<sub>2</sub>e)"},
+                legend = {"title_text": input.breakdown(),
+                          "orientation": "h",
+                          "yref": "container"},
+                margin = {"l": 0, "r": 0, "t": 28, "b": 0},
+                modebar = {"remove": ["select2d", "lasso2d", "autoScale2d"]},
                 template = "plotly_white"
                 )
             )
@@ -386,16 +434,4 @@ if __name__ == "__main__":
 
 #%% TODO
 
-#ADD CONTEXT TO SIMPLE PROJECT BREAKDOWN, PERHAPS PIVOT TO VERTICAL TO FIX RELAYOUT ISSUES ON SCROLLBAR APPEAR/DISAPPEAR AND MOVE OUT OF SIDEBAR TO LEFT HAND SIDE OF CONTENT AREA
-
-#REORGANISE AND EXPAND LAYOUT
-
-    #ADD CARD WITH TABS: SELECTED PLOT (PIE OF SELECTED (BY BREAKDOWN) vs. UNSELECTED) / DISTRIBUTION PLOT AS RIDGELINE (AREA, DURATION, CARBON EMISSIONS)
-    
-    #ADD AREA PLOT AS GROUPED (AREA TYPE) + STACKED (AREA SUB-TYPE) BAR (BREAKDOWN) CHART
-    
-    #ADD SHOWCASE (NO. OF PROJECTS, TOTAL AREA, TOTAL CARBON EMISSIONS)
-    
-#INFO BUTTON, SPECIFICALLY FOR CARBON PATHWAY
-
-#SPEED OPTIMISATION
+#ADD MARGINAL DISTRIBUTION TO CARBON DISTRIBUTION
