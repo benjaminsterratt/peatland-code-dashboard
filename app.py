@@ -53,6 +53,13 @@ COLOUR_PALETTE = {column: {(CHOICES[column] + ["Other"])[i]: co.DEFAULT_PLOTLY_C
 
 #%% FUNCTIONS
 
+#%%% UI
+
+def cardHeader(text, icon, popover):
+    return ui.div(ui.div(text), ui.popover(icon_svg(icon, height = "14.4px", margin_right = "0px"), ui.p(popover), "Data sourced from ", ui.a("UK Peatland Code Registry", href = "https://mer.markit.com/br-reg/public/index.jsp?entity=project&sort=project_name&dir=ASC&start=0&acronym=PCC&limit=15&additionalCertificationId=&categoryId=100000000000001&name=&standardId=100000000000157"), " in May 2024."), style = "display: flex; justify-content: space-between;")
+
+#%%% CALCULATION
+
 def formatNumber(number):
     if number >= 10**6 - 500:
         number = number / 10**6
@@ -164,12 +171,12 @@ userInterface = ui.page_navbar(
             ui.card(),
             ui.card(),
             ui.card(),
-            output_widget("simpleProjectBreakdown"),
-            col_widths = [12, 4, 4, 4, 12], row_heights = [2, 6, 1], class_ = "remove-modebar"),
+            col_widths = [12, 4, 4, 4], row_heights = [2, 7]),
         ),
     ui.nav_panel(
         #PROJECT LIST/MAP
-        #SELECTED PROJECT INFORMATION + PLOTS
+        #PROJECT COUNT PIE
+        #SELECTED PROJECT INFORMATION + PLOTS AS MODAL
         "Projects",
         ui.layout_columns(
             valueBoxes_ui("valueBoxes_projects", 1),
@@ -180,7 +187,7 @@ userInterface = ui.page_navbar(
                 ui.nav_panel("Map"),
                 title = "Projects"),
             ui.card(),
-        col_widths = [12, 6, 6], row_heights = [2, 7])
+        col_widths = [12, 8, 4], row_heights = [2, 7])
         ),
     ui.nav_panel(
         #AREA BREAKDOWN
@@ -197,12 +204,12 @@ userInterface = ui.page_navbar(
         ),
     ui.nav_panel(
         #CARBON PATHWAY
-        #CARBON DISTRIBUTION PLOT
+        #CARBON & DURATION SCATTER PLOT
         "Carbon",
         ui.layout_columns(
             valueBoxes_ui("valueBoxes_carbon", 3),
             ui.card(
-                ui.card_header("Pathway"),
+                ui.card_header(cardHeader("Pathway", "circle-question", "Cumulative predicted claimable emission reductions across projects' durations. Projects without start dates assumed to start in 2025.")),
                 output_widget("carbonPathway"),
                 full_screen = True),
             ui.card(),
@@ -256,50 +263,6 @@ def server(input, output, session):
             return ui.input_action_button("resetFilters", "Reset filters", style = "margin-bottom: 16px;")
         else:
             return ui.input_action_button("resetFilters", "Reset filters", style = "margin-bottom: 16px;", disabled = "")
-
-    @render_widget
-    def simpleProjectBreakdown():
-        df_unselected = DATA.copy()
-        df_unselected["Unselected"] = 1
-        df_unselected, order = orderAndTruncateBreakdown(df_unselected, input.breakdown(), "Unselected")
-        df_unselected = df_unselected.groupby(input.breakdown(), observed = True)["Unselected"].sum().reset_index()
-        df_unselected[input.breakdown()] = df_unselected[input.breakdown()].astype(pd.CategoricalDtype(order, ordered = True))
-        df_selected = data().copy()
-        df_selected["Selected"] = 1
-        if "Other" in order:
-            df_selected[input.breakdown()] = df_selected[input.breakdown()].where(df_selected[input.breakdown()].isin(order), "Other")        
-        df_selected = df_selected.groupby(input.breakdown(), observed = True)["Selected"].sum().reset_index()
-        df_selected[input.breakdown()] = df_selected[input.breakdown()].astype(pd.CategoricalDtype(order, ordered = True))
-        df = pd.merge(df_selected, df_unselected, "outer", input.breakdown())
-        df["Selected"] = df["Selected"].fillna(0)
-        df["Unselected"] = df["Unselected"] - df["Selected"]
-        df = df.melt(input.breakdown(), ["Selected", "Unselected"], "Selection Status", "Count")
-        df = pd.concat([df.loc[df["Selection Status"] == "Selected"].sort_values(input.breakdown()), df.loc[df["Selection Status"] == "Unselected"].sort_values(input.breakdown(), ascending = False)])
-        df["Base"] = df["Count"].cumsum() - df["Count"]
-        df["Count"] = df["Count"].astype(int)
-        return go.Figure(
-            data = [
-                go.Bar(
-                    x = [row["Count"]],
-                    y = [row["Selection Status"]],
-                    base = [row["Base"]],
-                    orientation = "h",
-                    marker = {"color": COLOUR_PALETTE[input.breakdown()][row[input.breakdown()]]},
-                    hovertext = [row["Count"]],
-                    hovertemplate = "<b>" + str(row[input.breakdown()]) + "</b><br>%{hovertext}<extra></extra>",
-                    hoverlabel = {"bgcolor": "white"}
-                    )
-                for i, row in df.iterrows()],
-            layout = go.Layout(
-                xaxis = {"fixedrange": True, "range": [0, df["Count"].sum()]},
-                yaxis = {"fixedrange": True, "autorange": "reversed"},
-                barmode = "stack",
-                bargap = 0,
-                showlegend = False,
-                margin = {"l": 0, "r": 0, "t": 0, "b": 0},
-                template = "plotly_white"
-                )
-            )
     
     for page in ["overview", "projects", "area", "carbon"]:
         valueBoxes_server("valueBoxes_" + page, data)

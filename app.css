@@ -1,7 +1,3 @@
 .plotly-notifier {
   display: none;
 }
-
-.remove-modebar:last-child .modebar {
-  display: none;
-}
