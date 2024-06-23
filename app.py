@@ -199,8 +199,6 @@ userInterface = ui.page_navbar(
         col_widths = [12, 8, 4], row_heights = [2, 7]),
         value = "projects"),
     ui.nav_panel(
-        #AREA BREAKDOWN
-        #AREA DISTRIBUTION PLOT
         "Area",
         ui.layout_columns(
             valueBoxes_ui("valueBoxes_area", 2),
@@ -209,14 +207,12 @@ userInterface = ui.page_navbar(
                 output_widget("areaBreakdown"),
                 full_screen = True),
             ui.card(
-                ui.card_header(infoCardHeader("Distribution", "Lorem ipsum...")),
+                ui.card_header(infoCardHeader("Distribution", "Distribution of projects' areas.")),
                 output_widget("areaDistribution"),
                 full_screen = True),
             col_widths = [12, 8, 4], row_heights = [2, 7]),
         value = "area"),
     ui.nav_panel(
-        #CARBON PATHWAY
-        #CARBON & DURATION SCATTER PLOT
         "Carbon",
         ui.layout_columns(
             valueBoxes_ui("valueBoxes_carbon", 3),
@@ -225,7 +221,7 @@ userInterface = ui.page_navbar(
                 output_widget("carbonPathway"),
                 full_screen = True),
             ui.card(
-                ui.card_header(infoCardHeader("Distribution", "Projects' duration and predicted claimable emission reductions.")),
+                ui.card_header(infoCardHeader("Distribution", "Projects' durations and predicted claimable emission reductions.")),
                 output_widget("carbonDistribution"),
                 full_screen = True),
             col_widths = [12, 8, 4], row_heights = [2, 7]),
@@ -352,7 +348,33 @@ def server(input, output, session):
     
     @render_widget
     def areaDistribution():
-        pass
+        df = data().copy()
+        df, order = orderAndTruncateBreakdown(df, input.breakdown(), "Area")
+        return go.Figure(
+            data = [
+                go.Violin(
+                    x = df.loc[df[input.breakdown()] == value, input.breakdown()],
+                    y = df.loc[df[input.breakdown()] == value, "Area"],
+                    spanmode = "hard",
+                    points = "all",
+                    pointpos = 0,
+                    jitter = 0,
+                    line_color = COLOUR_PALETTE[input.breakdown()][value],
+                    hoveron = "points",
+                    hovertext = df.loc[df[input.breakdown()] == value, "Name"],
+                    hovertemplate = "<i>%{hovertext}</i><br>%{y:.3s} ha<extra></extra>",
+                    hoverlabel = {"bgcolor": "white"}
+                    )
+                for value in order],
+            layout = go.Layout(
+                xaxis = {"title_text": input.breakdown()},
+                yaxis = {"title_text": "Area (ha)"},
+                showlegend = False,
+                margin = {"l": 0, "r": 0, "t": 28, "b": 0},
+                modebar = {"remove": ["select2d", "lasso2d", "autoScale2d"]},
+                template = "plotly_white"
+                )
+            )
     
     #%%% CARBON
     
@@ -431,7 +453,3 @@ app = App(userInterface, server)
 
 if __name__ == "__main__":
     run_app(app)
-
-#%% TODO
-
-#ADD MARGINAL DISTRIBUTION TO CARBON DISTRIBUTION
