@@ -190,12 +190,15 @@ userInterface = ui.page_navbar(
         ui.layout_columns(
             valueBoxes_ui("valueBoxes_projects", 1),
             ui.navset_card_pill(
-                ui.nav_panel("List",
+                ui.nav_panel("Table",
                              ui.output_data_frame("projectList")
                              ),
                 ui.nav_panel("Map"),
-                title = "Projects"),
-            ui.card(),
+                title = "List"),
+            ui.card(
+                ui.card_header(infoCardHeader("Count", "Count of projects.")),
+                output_widget("projectsCount"),
+                full_screen = True),
         col_widths = [12, 8, 4], row_heights = [2, 7]),
         value = "projects"),
     ui.nav_panel(
@@ -221,8 +224,8 @@ userInterface = ui.page_navbar(
                 output_widget("carbonPathway"),
                 full_screen = True),
             ui.card(
-                ui.card_header(infoCardHeader("Distribution", "Projects' durations and predicted claimable emission reductions.")),
-                output_widget("carbonDistribution"),
+                ui.card_header(infoCardHeader("Points", "Projects' durations and predicted claimable emission reductions.")),
+                output_widget("carbonPoints"),
                 full_screen = True),
             col_widths = [12, 8, 4], row_heights = [2, 7]),
         value = "carbon"),
@@ -304,6 +307,34 @@ def server(input, output, session):
     def projectList():
         return render.DataTable(data()[["Name"]], width = "100%", height = "100%", summary = False)
     
+    #%%%% BREAKDOWN
+    
+    @render_widget
+    def projectsCount():
+        df = data().copy()
+        df["Count"] = 1
+        df, order = orderAndTruncateBreakdown(df, input.breakdown(), "Count")
+        df = df.groupby(input.breakdown(), observed = False)["Count"].sum().reset_index()
+        return go.Figure(
+            data = go.Pie(
+                labels = df[input.breakdown()],
+                values = df["Count"],
+                hole = 0.5,
+                textinfo = "value",
+                textposition = "outside",
+                marker_colors = [COLOUR_PALETTE[input.breakdown()][label] for label in df[input.breakdown()]],
+                hovertemplate = "<b>%{label}</b><br>%{value:.0f} projects<extra></extra>",
+                hoverlabel = {"bgcolor": "white"}
+                ),
+            layout = go.Layout(
+                legend = {"title_text": input.breakdown(),
+                          "orientation": "h",
+                          "yref": "container"},
+                margin = {"l": 0, "r": 0, "t": 28, "b": 0},
+                template = "plotly_white"
+                )
+            )
+        
     #%%% AREA
     
     #%%%% BREAKDOWN
@@ -336,8 +367,6 @@ def server(input, output, session):
                 xaxis = {"title_text": "Area (ha)"},
                 yaxis = {"title_text": input.breakdown()},
                 barmode = "stack",
-                legend = {"orientation": "h",
-                          "yref": "container"},
                 margin = {"l": 0, "r": 0, "t": 28, "b": 0},
                 modebar = {"remove": ["select2d", "lasso2d", "autoScale2d"]},
                 template = "plotly_white"
@@ -415,10 +444,10 @@ def server(input, output, session):
                 )
             )
     
-    #%%%% DISTRIBUTION
+    #%%%% POINTS
     
     @render_widget
-    def carbonDistribution():
+    def carbonPoints():
         df = data().copy()
         df["Original Breakdown"] = df[input.breakdown()]
         df, order = orderAndTruncateBreakdown(df, input.breakdown(), "Claimable Emission Reductions")
@@ -453,3 +482,9 @@ app = App(userInterface, server)
 
 if __name__ == "__main__":
     run_app(app)
+
+#TODO
+
+#ADD INFO BUTTON TO BREAKDOWN ACCORDION IN SIDEBAR; HIDE/DISABLE ON OVERVIEW PAGE
+
+#ADD OPTIONS TO MODIFY POINTS/DISTRIBUTION PLOTS TO SHOW DIFFERENT VARIABLES BUT KEEP DEFAULTS AS SHOWN
