@@ -1,8 +1,10 @@
+import re
+
+import pandas as pd
+
 from shiny import module, ui, reactive, render, App, run_app
 from shinywidgets import output_widget, render_widget
 from faicons import icon_svg
-
-import pandas as pd
 
 import plotly.colors as co
 import plotly.graph_objects as go
@@ -12,9 +14,25 @@ import plotly.graph_objects as go
 DATA = pd.read_csv("data.csv", keep_default_na = False)
 
 DATA["Country"] = DATA["Country"].astype(pd.CategoricalDtype(["England", "Scotland", "Wales", "Northern Ireland"], ordered = True))
-DATA["Status"] = DATA["Status"].astype(pd.CategoricalDtype(["Under Development", "Validated", "Restoration Validated"], ordered = True))
+DATA["Project Status"] = DATA["Project Status"].astype(pd.CategoricalDtype(["Under Development", "Validated", "Restoration Validated"], ordered = True))
 
-GROUPING_COLUMNS = ["Country", "Status", "PIU Issuance", "Developer", "Validator"]
+DISPLAY_DATA = DATA.drop(columns = ["ID", "URL", "Latitude", "Longitude"]).rename(columns = {column: " — ".join(column.replace("; ", ";").split(";")[1:]) for column in DATA.columns if column.startswith("Subarea")})
+DISPLAY_DATA["Start Year"] = DISPLAY_DATA["Start Year"].where(DISPLAY_DATA["Start Year"] != 2025, None)
+DISPLAY_DATA["End Year"] = DISPLAY_DATA["End Year"].where(~DISPLAY_DATA["Start Year"].isna(), None)
+
+GROUPING_COLUMNS = {
+    "Country": "country",
+    "Project Status": "project status",
+    "PIU Status": "PIU status", 
+    "Developer": "developer", 
+    "Validator": "validator"
+    }
+
+VARIABLE_UNITS = {
+    "Area": "ha",
+    "Duration": "years",
+    "Predicted Claimable Emission Reductions": "tCO<sub>2</sub>e"
+    }
 
 AREA_COLOUR_PALETTE = {
     "Blanket Bog": {
@@ -47,9 +65,9 @@ AREA_COLOUR_PALETTE = {
 
 #%% PRE-PROCESSING
 
-CHOICES = {column: list(DATA[column].sort_values().unique()) for column in GROUPING_COLUMNS}
+CHOICES = {column: list(DATA[column].sort_values().unique()) for column in list(GROUPING_COLUMNS.keys())}
 
-COLOUR_PALETTE = {column: {(CHOICES[column] + ["Other"])[i]: co.DEFAULT_PLOTLY_COLORS[i % len(co.DEFAULT_PLOTLY_COLORS)] for i in range(0, len(CHOICES[column]) + 1)} for column in GROUPING_COLUMNS}
+COLOUR_PALETTE = {column: {(CHOICES[column] + ["Other"])[i]: co.DEFAULT_PLOTLY_COLORS[i % len(co.DEFAULT_PLOTLY_COLORS)] for i in range(0, len(CHOICES[column]) + 1)} for column in list(GROUPING_COLUMNS.keys())}
 
 #%% FUNCTIONS
 
@@ -158,7 +176,50 @@ def valueBoxes_server(input, output, session, data):
     
     @render.text
     def updateCarbon():
-        return formatNumber(data()["Claimable Emission Reductions"].sum()) + " tCO₂e"
+        return formatNumber(data()["Predicted Claimable Emission Reductions"].sum()) + " tCO₂e"
+    
+#%%% INFO POPOVERS
+
+@module.ui
+def infoCardHeader_ui(text, popover, variables = None):
+    
+    outputs = [re.sub("{(.*)}", "\\1", item) for item in re.findall("{[^{}]*}", popover)]
+    texts = re.split("{[^{}]*}", popover)
+    
+    popover = [texts[0]]
+    
+    if len(outputs) > 0:
+        for i in range(0, len(outputs)):
+            if outputs[i] == "{breakdown}":
+                popover.append(ui.output_text("breakdown", inline = True))
+            else:
+                popover.append(ui.output_text(outputs[i], inline = True))
+            popover.append(texts[i + 1])
+        
+    buttons = ui.popover(icon_svg("circle-question", height = "14.4px", margin_right = ["0px" if variables is None else "0.2em"]), ui.p(*popover), "Data sourced from ", ui.a("UK Peatland Code Registry", href = "https://mer.markit.com/br-reg/public/index.jsp?entity=project&sort=project_name&dir=ASC&start=0&acronym=PCC&limit=15&additionalCertificationId=&categoryId=100000000000001&name=&standardId=100000000000157"), " in May 2024.")
+    
+    if variables is not None:
+        buttons = ui.div(buttons, ui.popover(icon_svg("gear", height = "14.4px", margin_right = "0px"), *[ui.input_select(variable, ui.tags.b(variable), ["Duration", "Area"]) for variable in variables]))
+    
+    return ui.div(ui.div(text), buttons, style = "display: flex; justify-content: space-between;")
+
+
+@module.server
+def infoCardHeader_server(input, output, session, breakdownInput, variables = None):
+    
+    @render.text
+    def breakdown():
+        return GROUPING_COLUMNS[breakdownInput()]
+    
+    if variables is not None:
+        for variable in variables:
+            def function():
+                return getattr(input, variable)()
+            function.__name__ = variable
+            render.text(function)
+        return {variable: getattr(input, variable) for variable in variables}
+            
+    
 
 #%% UI
 
@@ -206,11 +267,11 @@ userInterface = ui.page_navbar(
         ui.layout_columns(
             valueBoxes_ui("valueBoxes_area", 2),
             ui.card(
-                ui.card_header(infoCardHeader("Breakdown", "Total area by type and sub-type.")),
+                ui.card_header(infoCardHeader_ui("areaBreakdown_header", "Breakdown", "Total area by {breakdown} broken down by type and sub-type.")),
                 output_widget("areaBreakdown"),
                 full_screen = True),
             ui.card(
-                ui.card_header(infoCardHeader("Distribution", "Distribution of projects' areas.")),
+                ui.card_header(infoCardHeader_ui("areaDistribution_header", "Distribution", "Distribution of projects' {Variable} by {breakdown}.", ["Variable"])),
                 output_widget("areaDistribution"),
                 full_screen = True),
             col_widths = [12, 8, 4], row_heights = [2, 7]),
@@ -234,12 +295,12 @@ userInterface = ui.page_navbar(
     sidebar = ui.sidebar(
             ui.accordion(
                 ui.accordion_panel("Breakdown",
-                                   ui.input_radio_buttons("breakdown", None, GROUPING_COLUMNS),
+                                   ui.input_radio_buttons("breakdown", None, list(GROUPING_COLUMNS.keys())),
                                    ),
                 ui.accordion_panel("Filters",
                                    ui.output_ui("resetFilters"),
                                    ui.accordion(
-                                       *[filter_ui(column.replace(" ", "_"), CHOICES[column], column) for column in GROUPING_COLUMNS],
+                                       *[filter_ui(column.replace(" ", "_"), CHOICES[column], column) for column in list(GROUPING_COLUMNS.keys())],
                                        open = False)
                                    ),
                 open = True),
@@ -255,7 +316,7 @@ def server(input, output, session):
     #%%% SIDEBAR    
 
     filters = {}
-    for column in GROUPING_COLUMNS:
+    for column in list(GROUPING_COLUMNS.keys()):
         filters[column] = filter_server(column.replace(" ", "_"), CHOICES[column], input.resetFilters)
     
     enableResetFilter = reactive.value(False)
@@ -305,7 +366,9 @@ def server(input, output, session):
     
     @render.data_frame
     def projectList():
-        return render.DataTable(data()[["Name"]], width = "100%", height = "100%", summary = False)
+        return render.DataTable(DISPLAY_DATA[["Name", "Country", "PIU Issuance", "Developer", "Validator", ]], width = "100%", height = "100%", summary = False)
+    
+    #ADD CONTROL TO ADD REMOVE/COLUMNS
     
     #%%%% BREAKDOWN
     
@@ -339,6 +402,8 @@ def server(input, output, session):
     
     #%%%% BREAKDOWN
     
+    infoCardHeader_server("areaBreakdown_header", input.breakdown)
+        
     @render_widget
     def areaBreakdown():
         df = data().copy()
@@ -375,15 +440,17 @@ def server(input, output, session):
     
     #%%%% DISTRIBUTION
     
+    areaDistribution_header = infoCardHeader_server("areaDistribution_header", input.breakdown, ["Variable"])
+    
     @render_widget
     def areaDistribution():
         df = data().copy()
-        df, order = orderAndTruncateBreakdown(df, input.breakdown(), "Area")
+        df, order = orderAndTruncateBreakdown(df, input.breakdown(), areaDistribution_header["Variable"]())
         return go.Figure(
             data = [
                 go.Violin(
                     x = df.loc[df[input.breakdown()] == value, input.breakdown()],
-                    y = df.loc[df[input.breakdown()] == value, "Area"],
+                    y = df.loc[df[input.breakdown()] == value, areaDistribution_header["Variable"]()],
                     spanmode = "hard",
                     points = "all",
                     pointpos = 0,
@@ -391,13 +458,13 @@ def server(input, output, session):
                     line_color = COLOUR_PALETTE[input.breakdown()][value],
                     hoveron = "points",
                     hovertext = df.loc[df[input.breakdown()] == value, "Name"],
-                    hovertemplate = "<i>%{hovertext}</i><br>%{y:.3s} ha<extra></extra>",
+                    hovertemplate = "<i>%{hovertext}</i><br>%{y:.3s} " + VARIABLE_UNITS[areaDistribution_header["Variable"]()] + "<extra></extra>",
                     hoverlabel = {"bgcolor": "white"}
                     )
                 for value in order],
             layout = go.Layout(
                 xaxis = {"title_text": input.breakdown()},
-                yaxis = {"title_text": "Area (ha)"},
+                yaxis = {"title_text": areaDistribution_header["Variable"]().capitalize() + " (" + VARIABLE_UNITS[areaDistribution_header["Variable"]()] + ")"},
                 showlegend = False,
                 margin = {"l": 0, "r": 0, "t": 28, "b": 0},
                 modebar = {"remove": ["select2d", "lasso2d", "autoScale2d"]},
@@ -412,17 +479,17 @@ def server(input, output, session):
     @render_widget
     def carbonPathway():
         df = data().copy()
-        df, order = orderAndTruncateBreakdown(df, input.breakdown(), "Claimable Emission Reductions")
+        df, order = orderAndTruncateBreakdown(df, input.breakdown(), "Predicted Claimable Emission Reductions")
         df["Year"] = [list(range(df["Start Year"].min() - 1, df["End Year"].max() + 2)) for i in range(0, len(df))]
         df = df.explode("Year")
-        df["Claimable Emission Reductions"] = (df["Claimable Emission Reductions"] / df["Duration"]).where((df["Year"] >= df["Start Year"]) & (df["Year"] <= df["End Year"]), 0)
-        df = df.groupby(["Year", input.breakdown()], observed = True)["Claimable Emission Reductions"].sum().reset_index().sort_values("Year")
-        df["Claimable Emission Reductions"] = df.groupby(input.breakdown(), observed = True)["Claimable Emission Reductions"].cumsum()
+        df["Predicted Claimable Emission Reductions"] = (df["Predicted Claimable Emission Reductions"] / df["Duration"]).where((df["Year"] >= df["Start Year"]) & (df["Year"] <= df["End Year"]), 0)
+        df = df.groupby(["Year", input.breakdown()], observed = True)["Predicted Claimable Emission Reductions"].sum().reset_index().sort_values("Year")
+        df["Predicted Claimable Emission Reductions"] = df.groupby(input.breakdown(), observed = True)["Predicted Claimable Emission Reductions"].cumsum()
         return go.Figure(
             data = [
                 go.Scatter(
                     x = df.loc[df[input.breakdown()] == value, "Year"],
-                    y = df.loc[df[input.breakdown()] == value, "Claimable Emission Reductions"],
+                    y = df.loc[df[input.breakdown()] == value, "Predicted Claimable Emission Reductions"],
                     stackgroup = "default",
                     name = value,
                     mode = "lines",
@@ -450,12 +517,12 @@ def server(input, output, session):
     def carbonPoints():
         df = data().copy()
         df["Original Breakdown"] = df[input.breakdown()]
-        df, order = orderAndTruncateBreakdown(df, input.breakdown(), "Claimable Emission Reductions")
+        df, order = orderAndTruncateBreakdown(df, input.breakdown(), "Predicted Claimable Emission Reductions")
         return go.Figure(
             data = [
                 go.Scatter(
                     x = df.loc[df[input.breakdown()] == value, "Duration"],
-                    y = df.loc[df[input.breakdown()] == value, "Claimable Emission Reductions"],
+                    y = df.loc[df[input.breakdown()] == value, "Predicted Claimable Emission Reductions"],
                     name = value,
                     mode = "markers",
                     marker = {"color": COLOUR_PALETTE[input.breakdown()][value]},
@@ -488,3 +555,10 @@ if __name__ == "__main__":
 #ADD INFO BUTTON TO BREAKDOWN ACCORDION IN SIDEBAR; HIDE/DISABLE ON OVERVIEW PAGE
 
 #ADD OPTIONS TO MODIFY POINTS/DISTRIBUTION PLOTS TO SHOW DIFFERENT VARIABLES BUT KEEP DEFAULTS AS SHOWN
+
+    #ADD CONSISTENT FORMAT FOR OPTION NAMES, NAMES IN INFO POPOVER, AND SELECT OPTIONS TO BE INPUTTED
+
+#ADD RESET BUTTION WHEN DEFAULTS NOT SELECTED
+
+#ENSURE INFO BUTTONS ARE UPDATED BASED ON CHANGES TO PLOTTED VARIABLES; SEE AREA DISTRIBUTION
+
