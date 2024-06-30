@@ -231,7 +231,7 @@ def infoCardHeader_server(input, output, session, breakdownInput, variables = No
     if variables is not None:
         for variable in variables:
             def function():
-                return CONTINUOUS_COLUMNS[getattr(input, variable)()][variables[variable]]
+                return CONTINUOUS_COLUMNS[getattr(input, re.sub("[^\\w]", "_", variable))()][variables[variable]]
             function.__name__ = re.sub("[^\\w]", "_", variable)
             render.text(function)
         return {variable: getattr(input, re.sub("[^\\w]", "_", variable)) for variable in variables}
@@ -298,7 +298,7 @@ userInterface = ui.page_navbar(
         ui.layout_columns(
             valueBoxes_ui("valueBoxes_carbon", 3),
             ui.card(
-                ui.card_header(infoCardHeader_ui("carbonPathway_header", "Pathway", "Cumulative {Y-Axis} across projects' durations broken down by {breakdown}. Projects without start dates assumed to start in 2025.", {"Y-axis": {"Choices": ["Predicted Emission Reductions", "Predicted Claimable Emission Reductions"], "Selected": "Claimable Emission Reductions"}})),
+                ui.card_header(infoCardHeader_ui("carbonPathway_header", "Pathway", "Cumulative {Y-axis} across projects' durations broken down by {breakdown}. Projects without start dates assumed to start in 2025.", {"Y-axis": {"Choices": ["Predicted Emission Reductions", "Predicted Claimable Emission Reductions"], "Selected": "Claimable Emission Reductions"}})),
                 output_widget("carbonPathway"),
                 full_screen = True),
             ui.card(
