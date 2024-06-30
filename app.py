@@ -200,6 +200,16 @@ def valueBoxes_server(input, output, session, data):
     
 #%%% INFO POPOVERS
 
+#%%%% FUNCTIONS
+
+def buildFunction(input, variable, version):
+    def function():
+        return CONTINUOUS_COLUMNS[getattr(input, re.sub("[^\\w]", "_", variable))()][version]
+    function.__name__ = re.sub("[^\\w]", "_", variable)
+    return function
+
+#%%%% MODULE
+
 @module.ui
 def infoCardHeader_ui(text, popover, variables = None):
     
@@ -220,7 +230,6 @@ def infoCardHeader_ui(text, popover, variables = None):
     
     return ui.div(ui.div(text), buttons, style = "display: flex; justify-content: space-between;")
 
-
 @module.server
 def infoCardHeader_server(input, output, session, breakdownInput, variables = None):
     
@@ -230,13 +239,8 @@ def infoCardHeader_server(input, output, session, breakdownInput, variables = No
     
     if variables is not None:
         for variable in variables:
-            def function():
-                return CONTINUOUS_COLUMNS[getattr(input, re.sub("[^\\w]", "_", variable))()][variables[variable]]
-            function.__name__ = re.sub("[^\\w]", "_", variable)
-            render.text(function)
+            render.text(buildFunction(input, variable, variables[variable]))
         return {variable: getattr(input, re.sub("[^\\w]", "_", variable)) for variable in variables}
-            
-    
 
 #%% UI
 
@@ -302,7 +306,7 @@ userInterface = ui.page_navbar(
                 output_widget("carbonPathway"),
                 full_screen = True),
             ui.card(
-                ui.card_header(infoCardHeader("Points", "Projects' durations and predicted claimable emission reductions.")),
+                ui.card_header(infoCardHeader_ui("carbonPoints_header", "Points", "Projects' {X-axis} and {Y-axis} broken down by {breakdown}.", {"X-axis": {"Choices": list(CONTINUOUS_COLUMNS.keys()), "Selected": "Duration"}, "Y-axis": {"Choices": list(CONTINUOUS_COLUMNS.keys()), "Selected": "Predicted Emission Reductions"}})),
                 output_widget("carbonPoints"),
                 full_screen = True),
             col_widths = [12, 8, 4], row_heights = [2, 7]),
@@ -356,7 +360,7 @@ def server(input, output, session):
             return ui.input_action_button("resetFilters", "Reset filters", style = "margin-bottom: 16px;")
         else:
             return ui.input_action_button("resetFilters", "Reset filters", style = "margin-bottom: 16px;", disabled = "")
-        
+         
     #%%% VALUE BOXES
     
     for page in ["overview", "projects", "area", "carbon"]:
@@ -532,27 +536,29 @@ def server(input, output, session):
     
     #%%%% POINTS
     
+    carbonPoints_header = infoCardHeader_server("carbonPoints_header", input.breakdown, {"X-axis": "PLURAL", "Y-axis": "PLURAL"})
+    
     @render_widget
     def carbonPoints():
         df = data().copy()
         df["Original Breakdown"] = df[input.breakdown()]
-        df, order = orderAndTruncateBreakdown(df, input.breakdown(), "Predicted Claimable Emission Reductions")
+        df, order = orderAndTruncateBreakdown(df, input.breakdown(), carbonPoints_header["Y-axis"]())
         return go.Figure(
             data = [
                 go.Scatter(
-                    x = df.loc[df[input.breakdown()] == value, "Duration"],
-                    y = df.loc[df[input.breakdown()] == value, "Predicted Claimable Emission Reductions"],
+                    x = df.loc[df[input.breakdown()] == value, carbonPoints_header["X-axis"]()],
+                    y = df.loc[df[input.breakdown()] == value, carbonPoints_header["Y-axis"]()],
                     name = value,
                     mode = "markers",
                     marker = {"color": COLOUR_PALETTE[input.breakdown()][value]},
                     customdata = df.loc[df[input.breakdown()] == value][["Original Breakdown", "Name"]],
-                    hovertemplate = "<b>%{customdata[0]}</b><br><i>%{customdata[1]}</i><br>%{x:.0f} years<br>%{y:.3s} tCO<sub>2</sub>e<extra></extra>",
+                    hovertemplate = "<b>%{customdata[0]}</b><br><i>%{customdata[1]}</i><br>%{x:." + CONTINUOUS_COLUMNS[carbonPoints_header["X-axis"]()]["ROUNDING"] + "} " + CONTINUOUS_COLUMNS[carbonPoints_header["X-axis"]()]["UNIT"] + "<br>%{y:." + CONTINUOUS_COLUMNS[carbonPoints_header["Y-axis"]()]["ROUNDING"] + "} " + CONTINUOUS_COLUMNS[carbonPoints_header["Y-axis"]()]["UNIT"] + "<extra></extra>",
                     hoverlabel = {"bgcolor": "white"}
                     )
                 for value in order],
             layout = go.Layout(
-                xaxis = {"title_text": "Duration (years)"},
-                yaxis = {"title_text": "Predicted claimable emission reductions (tCO<sub>2</sub>e)"},
+                xaxis = {"title_text": carbonPoints_header["X-axis"]().capitalize() + " (" + CONTINUOUS_COLUMNS[carbonPoints_header["X-axis"]()]["UNIT"] + ")"},
+                yaxis = {"title_text": carbonPoints_header["Y-axis"]().capitalize() + " (" + CONTINUOUS_COLUMNS[carbonPoints_header["Y-axis"]()]["UNIT"] + ")"},
                 legend = {"title_text": input.breakdown(),
                           "orientation": "h",
                           "yref": "container"},
@@ -572,13 +578,3 @@ if __name__ == "__main__":
 #TODO
 
 #ADD INFO BUTTON TO BREAKDOWN ACCORDION IN SIDEBAR; HIDE/DISABLE ON OVERVIEW PAGE
-
-#ADD OPTIONS TO MODIFY POINTS/DISTRIBUTION PLOTS TO SHOW DIFFERENT VARIABLES BUT KEEP DEFAULTS AS SHOWN
-
-    #ADD CONSISTENT FORMAT FOR OPTION NAMES, NAMES IN INFO POPOVER, AND SELECT OPTIONS TO BE INPUTTED
-
-#ADD RESET BUTTION WHEN DEFAULTS NOT SELECTED
-
-#ENSURE INFO BUTTONS ARE UPDATED BASED ON CHANGES TO PLOTTED VARIABLES; SEE AREA DISTRIBUTION
-
-#PREDICTED EMISSION REDUCTIONS AS DEFAULT INSTEAD OF PREDICTED CLAIMABLE
