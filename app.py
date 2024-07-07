@@ -93,9 +93,6 @@ COLOUR_PALETTE = {column: {(CHOICES[column] + ["Other"])[i]: co.DEFAULT_PLOTLY_C
 
 #%%% UI
 
-def infoCardHeader(text, popover):
-    return ui.div(ui.div(text), ui.popover(icon_svg("circle-question", height = "14.4px", margin_right = "0px"), ui.p(popover), "Data sourced from ", ui.a("UK Peatland Code Registry", href = "https://mer.markit.com/br-reg/public/index.jsp?entity=project&sort=project_name&dir=ASC&start=0&acronym=PCC&limit=15&additionalCertificationId=&categoryId=100000000000001&name=&standardId=100000000000157"), " in May 2024."), style = "display: flex; justify-content: space-between;")
-
 def linkedCardHeader(id, text):
     return ui.div(ui.div(text), ui.input_action_link(id, "View more"), style = "display: flex; justify-content: space-between;")
 
@@ -125,16 +122,16 @@ def orderAndTruncateBreakdown(df, breakdown, order, truncate = 5):
 #%%% FILTER
 
 @module.ui
-def filter_ui(choices, title):
+def filter_ui(title):
     elements = [
         ui.input_checkbox_group(
             "filter", 
             None, 
-            choices,
-            selected = choices
+            CHOICES[title],
+            selected = CHOICES[title]
             )
         ]
-    if len(choices) > 5:
+    if len(CHOICES[title]) > 5:
         elements = [
             ui.layout_columns(
                 ui.input_action_button("selectAll", "Select all"),
@@ -147,14 +144,24 @@ def filter_ui(choices, title):
         )
 
 @module.server
-def filter_server(input, output, session, choices, resetInput = None):
+def filter_server(input, output, session, name, filters, resetInput = None):
     
-    if len(choices) > 5:
+    @reactive.effect
+    def updateLabels():
+        df = DATA.copy()
+        for column in filters:
+            if column != name:
+                df = df[df[column].isin(filters[column]())]
+        df = pd.merge(DATA.copy()[[name]].drop_duplicates(), df[name].value_counts().reset_index().rename(columns = {"index": name, "count": "Count"}), how = "left").sort_values(["Count", name], ascending = [False, True])
+        df["Count"] = df["Count"].fillna(0).astype(int)
+        ui.update_checkbox_group("filter", choices = {row[name]: row[name] + " (" + str(row["Count"]) + ")" for i, row in df.iterrows()}, selected = input.filter())
+    
+    if len(CHOICES[name]) > 5:
     
         @reactive.effect
         @reactive.event(input.selectAll)
         def selectAll():
-            ui.update_checkbox_group("filter", selected = choices)
+            ui.update_checkbox_group("filter", selected = CHOICES[name])
             
         @reactive.effect
         @reactive.event(input.deselectAll)
@@ -166,7 +173,7 @@ def filter_server(input, output, session, choices, resetInput = None):
         @reactive.effect
         @reactive.event(resetInput)
         def reset():
-            ui.update_checkbox_group("filter", selected = choices)
+            ui.update_checkbox_group("filter", selected = CHOICES[name])
             
     return input.filter
 
@@ -248,7 +255,7 @@ userInterface = ui.page_navbar(
     ui.nav_spacer(),
     ui.nav_panel(
         #PROJECTS MAP (NON-BREAKDOWN) -> LINK TO PROJECTS TAB
-        #AREA SUNBURST (NON-BREAKDOWN) -> LINK TO AREA TAB
+        #AREA TREE MAP (NON-BREAKDOWN) -> LINK TO AREA TAB
         #CARBON PATHWAY (NON-BREAKDOWN) -> LINK TO CARBON TAB
         "Overview",
         ui.layout_columns(
@@ -265,21 +272,17 @@ userInterface = ui.page_navbar(
             col_widths = [12, 4, 4, 4], row_heights = [2, 7]),
         ),
     ui.nav_panel(
-        #PROJECT LIST/MAP
-        #PROJECT COUNT PIE
+        #PROJECT TABLE
+        #PROJECT MAP
         #SELECTED PROJECT INFORMATION + PLOTS AS MODAL
         "Projects",
         ui.layout_columns(
             valueBoxes_ui("valueBoxes_projects", 1),
-            ui.navset_card_pill(
-                ui.nav_panel("Table",
-                             ui.output_data_frame("projectList")
-                             ),
-                ui.nav_panel("Map"),
-                title = "List"),
             ui.card(
-                ui.card_header(infoCardHeader("Count", "Count of projects.")),
-                output_widget("projectsCount"),
+                ui.card_header("Table"),
+                full_screen = True),
+            ui.card(
+                ui.card_header("Map"),
                 full_screen = True),
         col_widths = [12, 8, 4], row_heights = [2, 7]),
         value = "projects"),
@@ -321,7 +324,7 @@ userInterface = ui.page_navbar(
                 ui.accordion_panel("Filters",
                                    ui.output_ui("resetFilters"),
                                    ui.accordion(
-                                       *[filter_ui(column.replace(" ", "_"), CHOICES[column], column) for column in list(BREAKDOWN_COLUMNS.keys())],
+                                       *[filter_ui(column.replace(" ", "_"), column) for column in list(BREAKDOWN_COLUMNS.keys())],
                                        open = False)
                                    ),
                 open = True),
@@ -338,7 +341,7 @@ def server(input, output, session):
 
     filters = {}
     for column in list(BREAKDOWN_COLUMNS.keys()):
-        filters[column] = filter_server(column.replace(" ", "_"), CHOICES[column], input.resetFilters)
+        filters[column] = filter_server(column.replace(" ", "_"), column, filters, input.resetFilters)
     
     enableResetFilter = reactive.value(False)
     
@@ -385,39 +388,15 @@ def server(input, output, session):
                 
     #%%% PROJECTS
     
+    #%%%% TABLE
+    
     @render.data_frame
     def projectList():
         return render.DataTable(DISPLAY_DATA[["Name", "Country", "PIU Issuance", "Developer", "Validator", ]], width = "100%", height = "100%", summary = False)
     
     #ADD CONTROL TO ADD REMOVE/COLUMNS
     
-    #%%%% BREAKDOWN
-    
-    @render_widget
-    def projectsCount():
-        df = data().copy()
-        df["Count"] = 1
-        df, order = orderAndTruncateBreakdown(df, input.breakdown(), "Count")
-        df = df.groupby(input.breakdown(), observed = False)["Count"].sum().reset_index()
-        return go.Figure(
-            data = go.Pie(
-                labels = df[input.breakdown()],
-                values = df["Count"],
-                hole = 0.5,
-                textinfo = "value",
-                textposition = "outside",
-                marker_colors = [COLOUR_PALETTE[input.breakdown()][label] for label in df[input.breakdown()]],
-                hovertemplate = "<b>%{label}</b><br>%{value:.0f} projects<extra></extra>",
-                hoverlabel = {"bgcolor": "white"}
-                ),
-            layout = go.Layout(
-                legend = {"title_text": input.breakdown(),
-                          "orientation": "h",
-                          "yref": "container"},
-                margin = {"l": 0, "r": 0, "t": 28, "b": 0},
-                template = "plotly_white"
-                )
-            )
+    #%%%% MAP
         
     #%%% AREA
     
@@ -577,4 +556,16 @@ if __name__ == "__main__":
 
 #TODO
 
-#ADD INFO BUTTON TO BREAKDOWN ACCORDION IN SIDEBAR; HIDE/DISABLE ON OVERVIEW PAGE
+#FIX DOUBLE REFRESH WHEN FILTERS USED
+
+#ADD INFO BUTTON TO BREAKDOWN AND FILTER ACCORDIONS IN SIDEBAR; HIDE/DISABLE BREAKDOWN ON OVERVIEW PAGE
+
+#ADDRESS COLOUR CLASHES WITH DEVELOPERS: SORT BY PROJECT COUNT WHEN ASSIGNING COLOURS
+
+#SEPARATE MAP AND TABLE AND MAKE TABLE 8 WIDTH AND MAP 4 WIDTH: ENSURE MAP HAS BREAKDOWN
+
+#REMOVE PROJECT COUNT CHART BUT ADD COUNT TO FILTER (E.G. Scotland (199))
+
+#FULLY PHASE OUT INFO CARD HEADER
+
+#ADD CO-ORDINATES AT SITES WHERE THIS IS MISSING
