@@ -9,12 +9,42 @@ from faicons import icon_svg
 import plotly.colors as co
 import plotly.graph_objects as go
 
+#%% FUNCTIONS
+
+#%%% GENERAL
+
+def insert(list, position, input):
+    return(list[:position] + [input] + list[position:])
+
+#%%% UI
+
+def linkedCardHeader(id, text):
+    return ui.div(ui.div(text), ui.input_action_link(id, "View more"), style = "display: flex; justify-content: space-between;")
+
+#%%% SERVER
+
+def formatNumber(number):
+    if number >= 10**6 - 500:
+        number = number / 10**6
+        suffix = "M"
+    elif number >= 10**3:
+        number = number / 10**3
+        suffix = "k"
+    else:
+        suffix = ""
+    return f"{number:.3g}{suffix}"
+
+def orderAndTruncateBreakdown(df, breakdown, order, truncate = 5):
+    order = df.groupby(breakdown)[order].sum().sort_values(ascending = False).reset_index()[breakdown].to_list()
+    if len(order) > truncate:
+        order = order[0:5]
+        df[breakdown] = df[breakdown].where(df[breakdown].isin(order), "Other")
+        order.append("Other")
+    return df, order
+
 #%% INPUTS
 
 DATA = pd.read_csv("data.csv", keep_default_na = False)
-
-DATA["Country"] = DATA["Country"].astype(pd.CategoricalDtype(["England", "Scotland", "Wales", "Northern Ireland"], ordered = True))
-DATA["Project Status"] = DATA["Project Status"].astype(pd.CategoricalDtype(["Under Development", "Validated", "Restoration Validated"], ordered = True))
 
 DISPLAY_DATA = DATA.drop(columns = ["ID", "URL", "Latitude", "Longitude"]).rename(columns = {column: " — ".join(column.replace("; ", ";").split(";")[1:]) for column in DATA.columns if column.startswith("Subarea")})
 DISPLAY_DATA["Start Year"] = DISPLAY_DATA["Start Year"].where(DISPLAY_DATA["Start Year"] != 2025, None)
@@ -27,6 +57,10 @@ BREAKDOWN_COLUMNS = {
     "Developer": "developer", 
     "Validator": "validator"
     }
+
+BREAKDOWN_CHOICES = {column: DATA[column].value_counts().index.to_list() for column in list(BREAKDOWN_COLUMNS.keys())}
+
+BREAKDOWN_COLOUR_PALETTE = {column: {insert(DATA[column].value_counts().index.to_list(), 5, "Other")[i]: co.DEFAULT_PLOTLY_COLORS[i % len(co.DEFAULT_PLOTLY_COLORS)] for i in range(0, len(BREAKDOWN_CHOICES[column]) + 1)} for column in list(BREAKDOWN_COLUMNS.keys())}
 
 CONTINUOUS_COLUMNS = {
     "Area": {
@@ -83,40 +117,6 @@ AREA_COLOUR_PALETTE = {
         }
     }
 
-#%% PRE-PROCESSING
-
-CHOICES = {column: list(DATA[column].sort_values().unique()) for column in list(BREAKDOWN_COLUMNS.keys())}
-
-COLOUR_PALETTE = {column: {(CHOICES[column] + ["Other"])[i]: co.DEFAULT_PLOTLY_COLORS[i % len(co.DEFAULT_PLOTLY_COLORS)] for i in range(0, len(CHOICES[column]) + 1)} for column in list(BREAKDOWN_COLUMNS.keys())}
-
-#%% FUNCTIONS
-
-#%%% UI
-
-def linkedCardHeader(id, text):
-    return ui.div(ui.div(text), ui.input_action_link(id, "View more"), style = "display: flex; justify-content: space-between;")
-
-#%%% CALCULATION
-
-def formatNumber(number):
-    if number >= 10**6 - 500:
-        number = number / 10**6
-        suffix = "M"
-    elif number >= 10**3:
-        number = number / 10**3
-        suffix = "k"
-    else:
-        suffix = ""
-    return f"{number:.3g}{suffix}"
-
-def orderAndTruncateBreakdown(df, breakdown, order, truncate = 5):
-    order = df.groupby(breakdown, observed = True)[order].sum().sort_values(ascending = False).reset_index()[breakdown].to_list()
-    if len(order) > truncate:
-        order = order[0:5]
-        df[breakdown] = df[breakdown].where(df[breakdown].isin(order), "Other")
-        order.append("Other")
-    return df, order
-
 #%% MODULES
 
 #%%% FILTER
@@ -127,11 +127,11 @@ def filter_ui(title):
         ui.input_checkbox_group(
             "filter", 
             None, 
-            CHOICES[title],
-            selected = CHOICES[title]
+            BREAKDOWN_CHOICES[title],
+            selected = BREAKDOWN_CHOICES[title]
             )
         ]
-    if len(CHOICES[title]) > 5:
+    if len(BREAKDOWN_CHOICES[title]) > 5:
         elements = [
             ui.layout_columns(
                 ui.input_action_button("selectAll", "Select all"),
@@ -156,12 +156,12 @@ def filter_server(input, output, session, name, filters, resetInput = None):
         df["Count"] = df["Count"].fillna(0).astype(int)
         ui.update_checkbox_group("filter", choices = {row[name]: row[name] + " (" + str(row["Count"]) + ")" for i, row in df.iterrows()}, selected = input.filter())
     
-    if len(CHOICES[name]) > 5:
+    if len(BREAKDOWN_CHOICES[name]) > 5:
     
         @reactive.effect
         @reactive.event(input.selectAll)
         def selectAll():
-            ui.update_checkbox_group("filter", selected = CHOICES[name])
+            ui.update_checkbox_group("filter", selected = BREAKDOWN_CHOICES[name])
             
         @reactive.effect
         @reactive.event(input.deselectAll)
@@ -173,7 +173,7 @@ def filter_server(input, output, session, name, filters, resetInput = None):
         @reactive.effect
         @reactive.event(resetInput)
         def reset():
-            ui.update_checkbox_group("filter", selected = CHOICES[name])
+            ui.update_checkbox_group("filter", selected = BREAKDOWN_CHOICES[name])
             
     return input.filter
 
@@ -345,17 +345,20 @@ def server(input, output, session):
     
     enableResetFilter = reactive.value(False)
     
-    @reactive.calc
-    def data():
-        data = DATA.copy()
+    data = reactive.value(DATA)
+    
+    @reactive.effect
+    def updateData():
+        df = DATA.copy()
         filtered = False
         for column in filters:
             selected = filters[column]()
-            if len(selected) != len(CHOICES[column]):
+            if len(selected) != len(BREAKDOWN_CHOICES[column]):
                 filtered = True
-                data = data[data[column].isin(selected)]
-        enableResetFilter.set(filtered)
-        return data
+                df = df[df[column].isin(selected)]
+        if set(df["ID"]) != set(data()["ID"]):    
+            enableResetFilter.set(filtered)
+            data.set(df)
     
     @render.ui
     def resetFilters():
@@ -455,7 +458,7 @@ def server(input, output, session):
                     points = "all",
                     pointpos = 0,
                     jitter = 0,
-                    line_color = COLOUR_PALETTE[input.breakdown()][value],
+                    line_color = BREAKDOWN_COLOUR_PALETTE[input.breakdown()][value],
                     hoveron = "points",
                     hovertext = df.loc[df[input.breakdown()] == value, "Name"],
                     hovertemplate = "<i>%{hovertext}</i><br>%{y:." + CONTINUOUS_COLUMNS[areaDistribution_header["Y-axis"]()]["ROUNDING"] + "} " + CONTINUOUS_COLUMNS[areaDistribution_header["Y-axis"]()]["UNIT"] + "<extra></extra>",
@@ -485,8 +488,8 @@ def server(input, output, session):
         df["Year"] = [list(range(df["Start Year"].min() - 1, df["End Year"].max() + 2)) for i in range(0, len(df))]
         df = df.explode("Year")
         df[carbonPathway_header["Y-axis"]()] = (df[carbonPathway_header["Y-axis"]()] / df["Duration"]).where((df["Year"] >= df["Start Year"]) & (df["Year"] <= df["End Year"]), 0)
-        df = df.groupby(["Year", input.breakdown()], observed = True)[carbonPathway_header["Y-axis"]()].sum().reset_index().sort_values("Year")
-        df[carbonPathway_header["Y-axis"]()] = df.groupby(input.breakdown(), observed = True)[carbonPathway_header["Y-axis"]()].cumsum()
+        df = df.groupby(["Year", input.breakdown()])[carbonPathway_header["Y-axis"]()].sum().reset_index().sort_values("Year")
+        df[carbonPathway_header["Y-axis"]()] = df.groupby(input.breakdown())[carbonPathway_header["Y-axis"]()].cumsum()
         return go.Figure(
             data = [
                 go.Scatter(
@@ -495,7 +498,7 @@ def server(input, output, session):
                     stackgroup = "default",
                     name = value,
                     mode = "lines",
-                    marker = {"color": COLOUR_PALETTE[input.breakdown()][value]},
+                    marker = {"color": BREAKDOWN_COLOUR_PALETTE[input.breakdown()][value]},
                     hovertemplate = "%{y:." + CONTINUOUS_COLUMNS[carbonPathway_header["Y-axis"]()]["ROUNDING"] + "} " + CONTINUOUS_COLUMNS[carbonPathway_header["Y-axis"]()]["UNIT"]
                     )
                 for value in order],
@@ -529,7 +532,7 @@ def server(input, output, session):
                     y = df.loc[df[input.breakdown()] == value, carbonPoints_header["Y-axis"]()],
                     name = value,
                     mode = "markers",
-                    marker = {"color": COLOUR_PALETTE[input.breakdown()][value]},
+                    marker = {"color": BREAKDOWN_COLOUR_PALETTE[input.breakdown()][value]},
                     customdata = df.loc[df[input.breakdown()] == value][["Original Breakdown", "Name"]],
                     hovertemplate = "<b>%{customdata[0]}</b><br><i>%{customdata[1]}</i><br>%{x:." + CONTINUOUS_COLUMNS[carbonPoints_header["X-axis"]()]["ROUNDING"] + "} " + CONTINUOUS_COLUMNS[carbonPoints_header["X-axis"]()]["UNIT"] + "<br>%{y:." + CONTINUOUS_COLUMNS[carbonPoints_header["Y-axis"]()]["ROUNDING"] + "} " + CONTINUOUS_COLUMNS[carbonPoints_header["Y-axis"]()]["UNIT"] + "<extra></extra>",
                     hoverlabel = {"bgcolor": "white"}
@@ -554,18 +557,10 @@ app = App(userInterface, server)
 if __name__ == "__main__":
     run_app(app)
 
-#TODO
-
-#FIX DOUBLE REFRESH WHEN FILTERS USED
+#%% TODO
 
 #ADD INFO BUTTON TO BREAKDOWN AND FILTER ACCORDIONS IN SIDEBAR; HIDE/DISABLE BREAKDOWN ON OVERVIEW PAGE
 
-#ADDRESS COLOUR CLASHES WITH DEVELOPERS: SORT BY PROJECT COUNT WHEN ASSIGNING COLOURS
-
 #SEPARATE MAP AND TABLE AND MAKE TABLE 8 WIDTH AND MAP 4 WIDTH: ENSURE MAP HAS BREAKDOWN
-
-#REMOVE PROJECT COUNT CHART BUT ADD COUNT TO FILTER (E.G. Scotland (199))
-
-#FULLY PHASE OUT INFO CARD HEADER
 
 #ADD CO-ORDINATES AT SITES WHERE THIS IS MISSING
