@@ -46,10 +46,6 @@ def orderAndTruncateBreakdown(df, breakdown, order, truncate = 5):
 
 DATA = pd.read_csv("data.csv", keep_default_na = False)
 
-DISPLAY_DATA = DATA.drop(columns = ["ID", "URL", "Latitude", "Longitude"]).rename(columns = {column: " — ".join(column.replace("; ", ";").split(";")[1:]) for column in DATA.columns if column.startswith("Subarea")})
-DISPLAY_DATA["Start Year"] = DISPLAY_DATA["Start Year"].where(DISPLAY_DATA["Start Year"] != 2025, None)
-DISPLAY_DATA["End Year"] = DISPLAY_DATA["End Year"].where(~DISPLAY_DATA["Start Year"].isna(), None)
-
 BREAKDOWN_COLUMNS = {
     "Country": "country",
     "Project Status": "project status",
@@ -63,25 +59,25 @@ BREAKDOWN_CHOICES = {column: DATA[column].value_counts().index.to_list() for col
 BREAKDOWN_COLOUR_PALETTE = {column: {insert(DATA[column].value_counts().index.to_list(), 5, "Other")[i]: co.DEFAULT_PLOTLY_COLORS[i % len(co.DEFAULT_PLOTLY_COLORS)] for i in range(0, len(BREAKDOWN_CHOICES[column]) + 1)} for column in list(BREAKDOWN_COLUMNS.keys())}
 
 CONTINUOUS_COLUMNS = {
+    "Duration": {
+        "UNIT": "years", 
+        "SINGULAR": "duration", 
+        "PLURAL": "durations", 
+        "ROUNDING": "0f"},
     "Area": {
         "UNIT": "ha", 
         "SINGULAR": "area", 
         "PLURAL": "areas",
         "ROUNDING": "3s"
         },
-    "Duration": {
-        "UNIT": "years", 
-        "SINGULAR": "duration", 
-        "PLURAL": "durations", 
-        "ROUNDING": "0f"},
     "Predicted Emission Reductions": {
-        "UNIT": "tCO<sub>2</sub>e", 
+        "UNIT": "tCO₂e", 
         "SINGULAR": "predicted emission reductions", 
         "PLURAL": "predicted emission reductions",
         "ROUNDING": "3s"
         },
     "Predicted Claimable Emission Reductions": {
-        "UNIT": "tCO<sub>2</sub>e", 
+        "UNIT": "tCO₂e", 
         "SINGULAR": "predicted claimable emission reductions", 
         "PLURAL": "predicted claimable emission reductions",
         "ROUNDING": "3s"
@@ -233,20 +229,22 @@ def infoCardHeader_ui(text, popover, variables = None):
     buttons = ui.popover(icon_svg("circle-question", height = "14.4px", margin_right = ["0px" if variables is None else "0.2em"]), ui.p(*popover), "Data sourced from ", ui.a("UK Peatland Code Registry", href = "https://mer.markit.com/br-reg/public/index.jsp?entity=project&sort=project_name&dir=ASC&start=0&acronym=PCC&limit=15&additionalCertificationId=&categoryId=100000000000001&name=&standardId=100000000000157"), " in May 2024.")
     
     if variables is not None:
-        buttons = ui.div(buttons, ui.popover(icon_svg("gear", height = "14.4px", margin_right = "0px"), *[ui.input_select(re.sub("[^\\w]", "_", variable), ui.tags.b(variable), variables[variable]["Choices"], selected = variables[variable]["Selected"]) for variable in variables]))
+        buttons = ui.div(buttons, ui.popover(icon_svg("gear", height = "14.4px", margin_right = "0px"), *[ui.input_select(re.sub("[^\\w]", "_", variable), ui.tags.b(variable), variables[variable]["Choices"], selected = variables[variable]["Selected"], multiple = isinstance(variables[variable]["Selected"], list)) for variable in variables]))
     
     return ui.div(ui.div(text), buttons, style = "display: flex; justify-content: space-between;")
 
 @module.server
-def infoCardHeader_server(input, output, session, breakdownInput, variables = None):
+def infoCardHeader_server(input, output, session, breakdownInput = None, variables = None):
     
-    @render.text
-    def breakdown():
-        return BREAKDOWN_COLUMNS[breakdownInput()]
+    if breakdownInput is not None:
+        @render.text
+        def breakdown():
+            return BREAKDOWN_COLUMNS[breakdownInput()]
     
     if variables is not None:
         for variable in variables:
-            render.text(buildFunction(input, variable, variables[variable]))
+            if variables[variable] is not None:
+                render.text(buildFunction(input, variable, variables[variable]))
         return {variable: getattr(input, re.sub("[^\\w]", "_", variable)) for variable in variables}
 
 #%% UI
@@ -279,7 +277,8 @@ userInterface = ui.page_navbar(
         ui.layout_columns(
             valueBoxes_ui("valueBoxes_projects", 1),
             ui.card(
-                ui.card_header("Table"),
+                ui.card_header(infoCardHeader_ui("projectsTable_header", "Table", "Table of projects.", {"Columns": {"Choices": ["Start Year", "End Year"] + list(CONTINUOUS_COLUMNS.keys()), "Selected": ["Duration", "Area", "Predicted Emission Reductions"]}})),
+                ui.output_data_frame("projectsTable"),
                 full_screen = True),
             ui.card(
                 ui.card_header("Map"),
@@ -393,12 +392,18 @@ def server(input, output, session):
     
     #%%%% TABLE
     
+    projectsTable_header = infoCardHeader_server("projectsTable_header", variables = {"Columns": None})
+    
     @render.data_frame
-    def projectList():
-        return render.DataTable(DISPLAY_DATA[["Name", "Country", "PIU Issuance", "Developer", "Validator", ]], width = "100%", height = "100%", summary = False)
-    
-    #ADD CONTROL TO ADD REMOVE/COLUMNS
-    
+    def projectsTable():
+        df = data().copy()
+        if "Start Year" or "End Year" in projectsTable_header["Columns"]():
+            df["Start Year"] = df["Start Year"].where(df["Start Year"] != 2025, None)
+        if "End Year" in projectsTable_header["Columns"]():
+            df["End Year"] = df["End Year"].where(~df["Start Year"].isna(), None)
+        df = df[["Name", input.breakdown(), *projectsTable_header["Columns"]()]].rename(columns = {column: column + " (" + CONTINUOUS_COLUMNS[column]["UNIT"] + ")" for column in projectsTable_header["Columns"]() if column in CONTINUOUS_COLUMNS})
+        return render.DataTable(df, width = "100%", height = "100%", summary = False, selection_mode = "row")
+            
     #%%%% MAP
         
     #%%% AREA
@@ -558,6 +563,10 @@ if __name__ == "__main__":
     run_app(app)
 
 #%% TODO
+
+#SORT INPUT DATA ALPHABETICALLY BY NAME
+
+#IF POSSIBLE: IMPROVE TABLE STYLING, REDUCE HEADER WIDTH, ETC.
 
 #ADD INFO BUTTON TO BREAKDOWN AND FILTER ACCORDIONS IN SIDEBAR; HIDE/DISABLE BREAKDOWN ON OVERVIEW PAGE
 
