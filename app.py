@@ -211,6 +211,12 @@ def buildFunction(input, variable, version):
     function.__name__ = re.sub("[^\\w]", "_", variable)
     return function
 
+def buildInput(id, label, choices, selected):
+    if isinstance(selected, list):
+        return ui.input_checkbox_group(id, label, choices, selected = selected)
+    else:
+        return ui.input_radio_buttons(id, label, choices, selected = selected)
+
 #%%%% MODULE
 
 @module.ui
@@ -229,7 +235,7 @@ def infoCardHeader_ui(text, popover, variables = None):
     buttons = ui.popover(icon_svg("circle-question", height = "14.4px", margin_right = ["0px" if variables is None else "0.2em"]), ui.p(*popover), "Data sourced from ", ui.a("UK Peatland Code Registry", href = "https://mer.markit.com/br-reg/public/index.jsp?entity=project&sort=project_name&dir=ASC&start=0&acronym=PCC&limit=15&additionalCertificationId=&categoryId=100000000000001&name=&standardId=100000000000157"), " in May 2024.")
     
     if variables is not None:
-        buttons = ui.div(buttons, ui.popover(icon_svg("gear", height = "14.4px", margin_right = "0px"), *[ui.input_select(re.sub("[^\\w]", "_", variable), ui.tags.b(variable), variables[variable]["Choices"], selected = variables[variable]["Selected"], multiple = isinstance(variables[variable]["Selected"], list)) for variable in variables]))
+        buttons = ui.div(buttons, ui.popover(icon_svg("gear", height = "14.4px", margin_right = "0px"), ui.div(*[buildInput(re.sub("[^\\w]", "_", variable), ui.tags.b(variable), variables[variable]["Choices"], variables[variable]["Selected"]) for variable in variables])))
     
     return ui.div(ui.div(text), buttons, style = "display: flex; justify-content: space-between;")
 
@@ -270,7 +276,6 @@ userInterface = ui.page_navbar(
             col_widths = [12, 4, 4, 4], row_heights = [2, 7]),
         ),
     ui.nav_panel(
-        #PROJECT TABLE
         #PROJECT MAP
         #SELECTED PROJECT INFORMATION + PLOTS AS MODAL
         "Projects",
@@ -304,7 +309,7 @@ userInterface = ui.page_navbar(
         ui.layout_columns(
             valueBoxes_ui("valueBoxes_carbon", 3),
             ui.card(
-                ui.card_header(infoCardHeader_ui("carbonPathway_header", "Pathway", "Cumulative {Y-axis} across projects' durations broken down by {breakdown}. Projects without start dates assumed to start in 2025.", {"Y-axis": {"Choices": ["Predicted Emission Reductions", "Predicted Claimable Emission Reductions"], "Selected": "Claimable Emission Reductions"}})),
+                ui.card_header(infoCardHeader_ui("carbonPathway_header", "Pathway", "Cumulative {Y-axis} across projects' durations broken down by {breakdown}. Projects without start dates assumed to start in 2025.", {"Y-axis": {"Choices": ["Predicted Emission Reductions", "Predicted Claimable Emission Reductions"], "Selected": "Predicted Emission Reductions"}})),
                 output_widget("carbonPathway"),
                 full_screen = True),
             ui.card(
@@ -570,6 +575,6 @@ if __name__ == "__main__":
 
 #ADD INFO BUTTON TO BREAKDOWN AND FILTER ACCORDIONS IN SIDEBAR; HIDE/DISABLE BREAKDOWN ON OVERVIEW PAGE
 
-#SEPARATE MAP AND TABLE AND MAKE TABLE 8 WIDTH AND MAP 4 WIDTH: ENSURE MAP HAS BREAKDOWN
+#ADD MAP WITH BREAKDOWN
 
 #ADD CO-ORDINATES AT SITES WHERE THIS IS MISSING

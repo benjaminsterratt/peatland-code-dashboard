@@ -1,3 +1,11 @@
+.form-group:last-child {
+  margin-bottom: 0px;
+}
+
+.popover {
+  max-width: 330px;
+}
+
 .plotly-notifier {
   display: none;
 }
