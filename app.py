@@ -205,17 +205,17 @@ def valueBoxes_server(input, output, session, data):
 
 #%%%% FUNCTIONS
 
-def buildFunction(input, variable, version):
-    def function():
-        return CONTINUOUS_COLUMNS[getattr(input, re.sub("[^\\w]", "_", variable))()][version]
-    function.__name__ = re.sub("[^\\w]", "_", variable)
-    return function
-
 def buildInput(id, label, choices, selected):
     if isinstance(selected, list):
         return ui.input_checkbox_group(id, label, choices, selected = selected)
     else:
         return ui.input_radio_buttons(id, label, choices, selected = selected)
+
+def buildFunction(input, variable, version):
+    def function():
+        return CONTINUOUS_COLUMNS[getattr(input, re.sub("[^\\w]", "_", variable))()][version]
+    function.__name__ = re.sub("[^\\w]", "_", variable)
+    return function
 
 #%%%% MODULE
 
@@ -395,6 +395,15 @@ def server(input, output, session):
                 
     #%%% PROJECTS
     
+    #%%%% MODAL
+    
+    modal = reactive.value(None)
+    
+    @reactive.effect
+    def projectsModal():
+        if modal() is not None:
+            ui.modal_show(ui.modal(title = modal(), size = "xl"))
+    
     #%%%% TABLE
     
     projectsTable_header = infoCardHeader_server("projectsTable_header", variables = {"Columns": None})
@@ -409,6 +418,14 @@ def server(input, output, session):
         df = df[["Name", input.breakdown(), *projectsTable_header["Columns"]()]].rename(columns = {column: column + " (" + CONTINUOUS_COLUMNS[column]["UNIT"] + ")" for column in projectsTable_header["Columns"]() if column in CONTINUOUS_COLUMNS})
         return render.DataTable(df, width = "100%", height = "100%", summary = False, selection_mode = "row")
             
+    @reactive.effect
+    def projectsTableTriggerModal():
+        project = projectsTable.data_view(selected = True)["Name"]
+        if len(project) > 0:
+            modal.set(project.values[0])
+        else:
+            modal.set(None)
+        
     #%%%% MAP
         
     #%%% AREA
