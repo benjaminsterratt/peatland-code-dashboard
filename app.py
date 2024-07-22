@@ -402,7 +402,7 @@ def server(input, output, session):
     @reactive.effect
     def projectsModal():
         if modal() is not None:
-            ui.modal_show(ui.modal(title = modal(), size = "xl"))
+            ui.modal_show(ui.modal(title = modal(), footer = None, size = "xl", easy_close = True))
     
     #%%%% TABLE
     
@@ -418,12 +418,18 @@ def server(input, output, session):
         df = df[["Name", input.breakdown(), *projectsTable_header["Columns"]()]].rename(columns = {column: column + " (" + CONTINUOUS_COLUMNS[column]["UNIT"] + ")" for column in projectsTable_header["Columns"]() if column in CONTINUOUS_COLUMNS})
         return render.DataTable(df, width = "100%", height = "100%", summary = False, selection_mode = "row")
             
+    row = reactive.value(None)
+    
     @reactive.effect
+    @reactive.event(projectsTable.input_cell_selection)
     def projectsTableTriggerModal():
-        project = projectsTable.data_view(selected = True)["Name"]
-        if len(project) > 0:
-            modal.set(project.values[0])
+        selectedRow = projectsTable.input_cell_selection()["rows"]
+        if len(selectedRow) > 0:
+            if selectedRow != row():
+                row.set(selectedRow)
+                modal.set(data()["Name"].iloc[projectsTable.input_cell_selection()["rows"][0]])
         else:
+            row.set(None)
             modal.set(None)
         
     #%%%% MAP
