@@ -402,7 +402,47 @@ def server(input, output, session):
     @reactive.effect
     def projectsModal():
         if modal() is not None:
-            ui.modal_show(ui.modal(title = modal(), footer = None, size = "xl", easy_close = True))
+            values = DATA.copy().loc[DATA["Name"] == modal()].reset_index().to_dict("index")[0]
+            paragraph1 = [ui.tags.b(values["Name"]), " is a peatland restoration project in ", values["Country"], " with ", ui.tags.b(values["Developer"]), " as the project developer. "]
+            if values["Project Status"] == "Under Development":
+                paragraph1 = paragraph1 + ["The project is under development and the project plan has not yet been validated "]
+                if values["Validator"] == "N/A":
+                    paragraph1 = paragraph1 + ["or a validator selected."]
+                else:
+                    paragraph1 = paragraph1 + ["but ", ui.tags.b(values["Validator"]), " has been selected as the validator."]
+            elif values["Project Status"] == "Validated":
+                paragraph1 = paragraph1 + ["The project plan has been validated by ", ui.tags.b(values["Validator"]), " "]
+                if values["PIU Status"] == "Unissued":
+                    paragraph1 = paragraph1 + ["but restoration is still to be validated and PIUs are not yet issued."]
+                elif values["PIU Status"] == "Issued":
+                    paragraph1 = paragraph1 + ["and PIUs have been issued ahead of restoration validation which is still to occur."]
+                else:
+                    raise ValueError("Unexpected 'PIU Status' value.")
+            elif values["Project Status"] == "Restoration Validated":
+                paragraph1 = paragraph1 + ["Restoration has been completed and validated by ", ui.tags.b(values["Validator"]), " "]
+                if values["PIU Status"] == "Unissued":
+                    paragraph1 = paragraph1 + [" but PIUs are yet to be issued."]
+                elif values["PIU Status"] == "Issued":
+                    paragraph1 = paragraph1 + [" and PIUs have been issued."]
+                else:
+                    raise ValueError("Unexpected 'PIU Status' value.")
+            else:
+                raise ValueError("Unexpected 'Project Status' value.")
+            paragraph2 = ["The project covers ", formatNumber(values["Area"]), " ha and is predicted to lead to ", formatNumber(values["Predicted Emission Reductions"]), " tCO₂e of emission reductions over ", values["Duration"], " years"]
+            if values["Start Year"] == 2025:
+                paragraph2 = paragraph2 + ["."]
+            else:
+                paragraph2 = paragraph2 + [", starting in ", values["Start Year"], "."]
+            paragraph2 = paragraph2 + [" ", formatNumber(values["Predicted Claimable Emission Reductions"]) , " tCO₂e of this (", round(values["Predicted Claimable Emission Reductions"]/values["Predicted Emission Reductions"]*100), "%) is claimable." ]
+            ui.modal_show(
+                ui.modal(
+                    ui.p(paragraph1),
+                    ui.accordion(ui.accordion_panel("Location"), {"style": "margin-bottom: 16px"}),
+                    ui.p(paragraph2),
+                    ui.accordion(ui.accordion_panel("Area Types"), {"style": "margin-bottom: 16px"}),
+                    "Test",
+                    title = modal(), footer = None, size = "m", easy_close = True)
+                )
     
     #%%%% TABLE
     
@@ -591,6 +631,8 @@ if __name__ == "__main__":
     run_app(app)
 
 #%% TODO
+
+#PROJECT MODAL TRIGGER FROM MAP MAY NEED NEW TRIGGER TO AVOID NEED TO RESET -> NONE -> NEW TRIGGER
 
 #SORT INPUT DATA ALPHABETICALLY BY NAME
 
