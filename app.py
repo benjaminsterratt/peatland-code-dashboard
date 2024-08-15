@@ -433,14 +433,40 @@ def server(input, output, session):
                 paragraph2 = paragraph2 + ["."]
             else:
                 paragraph2 = paragraph2 + [", starting in ", values["Start Year"], "."]
-            paragraph2 = paragraph2 + [" ", formatNumber(values["Predicted Claimable Emission Reductions"]) , " tCO₂e of this (", round(values["Predicted Claimable Emission Reductions"]/values["Predicted Emission Reductions"]*100), "%) is claimable." ]
+            if values["Predicted Emission Reductions"] != 0:
+                paragraph2 = paragraph2 + [" ", formatNumber(values["Predicted Claimable Emission Reductions"]) , " tCO₂e of this (", round(values["Predicted Claimable Emission Reductions"] / values["Predicted Emission Reductions"] * 100), "%) is claimable."]
+            df_subtype = pd.concat([pd.DataFrame({"Type": [re.sub(".*; (.*); .*", "\\1", key)], "Sub-type": [re.sub(".*; .*; (.*)", "\\1", key)], "Area": [values[key]]}) for key in values if "Subarea" in key])
+            df_subtype["Area Percentage"] = df_subtype["Area"] / df_subtype["Area"].sum() * 100
+            df_type = df_subtype.loc[df_subtype["Area Percentage"] > 0].groupby("Type")["Area Percentage"].sum().reset_index().sort_values("Area Percentage", ascending = False)
+            df_subtype = df_subtype.loc[(df_subtype["Type"] == df_type["Type"].iloc[0]) & (df_subtype["Area Percentage"] >= 10)].sort_values("Area Percentage", ascending = False)
+            paragraph3 = "The site is "
+            if len(df_type) == 1:
+                paragraph3 = paragraph3 + "fully "
+            elif round(df_type["Area Percentage"].iloc[0]) == 100:
+                paragraph3 = paragraph3 + "almost fully "
+            else:
+                paragraph3 = paragraph3 + str(round(df_type["Area Percentage"].iloc[0])) + "% "
+            paragraph3 = paragraph3 + df_type["Type"].iloc[0].lower()
+            if len(df_subtype) > 0:
+                paragraph3 = paragraph3 + ", "
+                if (len(df_subtype) == 1) & (df_subtype["Area Percentage"].iloc[0] == df_type["Area Percentage"].iloc[0]):
+                    paragraph3 = paragraph3 + " all of which is classed as '" + df_subtype["Sub-type"].iloc[0] + "'."
+                else:
+                    paragraph3 = paragraph3 + "including "
+                    if len(df_subtype) > 1:
+                        for i in range(0, len(df_subtype) - 1):
+                            paragraph3 = paragraph3 + formatNumber(df_subtype["Area"].iloc[i]) + " ha classed as '" + df_subtype["Sub-type"].iloc[i] + "', "
+                        paragraph3 = paragraph3 + " and "
+                    paragraph3 = paragraph3 + formatNumber(df_subtype["Area"].iloc[-1]) + " ha classed as '" + df_subtype["Sub-type"].iloc[-1] + "'."
+            else:
+                paragraph3 = paragraph3 + "."
             ui.modal_show(
                 ui.modal(
                     ui.p(paragraph1),
                     ui.accordion(ui.accordion_panel("Location"), {"style": "margin-bottom: 16px"}),
                     ui.p(paragraph2),
                     ui.accordion(ui.accordion_panel("Area Types"), {"style": "margin-bottom: 16px"}),
-                    "Test",
+                    paragraph3,
                     title = modal(), footer = None, size = "m", easy_close = True)
                 )
     
