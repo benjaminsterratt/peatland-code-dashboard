@@ -398,6 +398,7 @@ def server(input, output, session):
     #%%%% MODAL
     
     modal = reactive.value(None)
+    modal_data = reactive.value(None)
     
     @reactive.effect
     def projectsModal():
@@ -436,6 +437,7 @@ def server(input, output, session):
             if values["Predicted Emission Reductions"] != 0:
                 paragraph2 = paragraph2 + [" ", formatNumber(values["Predicted Claimable Emission Reductions"]) , " tCO₂e of this (", round(values["Predicted Claimable Emission Reductions"] / values["Predicted Emission Reductions"] * 100), "%) is claimable."]
             df_subtype = pd.concat([pd.DataFrame({"Type": [re.sub(".*; (.*); .*", "\\1", key)], "Sub-type": [re.sub(".*; .*; (.*)", "\\1", key)], "Area": [values[key]]}) for key in values if "Subarea" in key])
+            modal_data.set(df_subtype)
             df_subtype["Area Percentage"] = df_subtype["Area"] / df_subtype["Area"].sum() * 100
             df_type = df_subtype.loc[df_subtype["Area Percentage"] > 0].groupby("Type")["Area Percentage"].sum().reset_index().sort_values("Area Percentage", ascending = False)
             df_subtype = df_subtype.loc[(df_subtype["Type"] == df_type["Type"].iloc[0]) & (df_subtype["Area Percentage"] >= 10)].sort_values("Area Percentage", ascending = False)
@@ -467,8 +469,24 @@ def server(input, output, session):
                     ui.p(paragraph2),
                     ui.accordion(ui.accordion_panel("Area Types"), {"style": "margin-bottom: 16px"}),
                     paragraph3,
-                    title = modal(), footer = None, size = "m", easy_close = True)
+                    title = modal(), 
+                    footer = [
+                        ui.input_action_button("projectsModalClose", "Close", icon = icon_svg("xmark", height = "14.4px"), style = "flex: 1 0 auto;"), 
+                        ui.a(icon_svg("arrow-up-right-from-square", height = "14.4px"), " View on Peatland Code Registry ", href = values["URL"], style = "flex: 1 0 auto;", class_ = "btn btn-default")
+                        ],
+                    size = "m")
                 )
+            
+    @reactive.effect
+    @reactive.event(input.projectsModalClose)
+    def projectsModalClose():
+        ui.modal_remove()
+            
+    @render_widget
+    def projectsModalArea():
+        if modal_data() is not None:
+            #TREE MAP
+            pass
     
     #%%%% TABLE
     
@@ -658,7 +676,7 @@ if __name__ == "__main__":
 
 #%% TODO
 
-#PROJECT MODAL TRIGGER FROM MAP MAY NEED NEW TRIGGER TO AVOID NEED TO RESET -> NONE -> NEW TRIGGER
+#PROJECT MODAL TRIGGER FROM MAP MAY NEED NEW TRIGGER TO AVOID NEED TO RESET -> NONE -> NEW TRIGGER; REMOVE TABLE SELECTION ON MODAL TRIGGER
 
 #SORT INPUT DATA ALPHABETICALLY BY NAME
 
