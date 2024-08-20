@@ -86,30 +86,29 @@ CONTINUOUS_COLUMNS = {
 
 AREA_COLOUR_PALETTE = {
     "Blanket Bog": {
-        "Near Natural": "rgba(31, 119, 180, 0.3)",
+        "": "rgba(31, 119, 180, 0.25)",
+        "Near Natural": "rgba(31, 119, 180, 0.25)",
         "Modified": "rgba(31, 119, 180, 0.5)",
-        "Drained: Hagg/Gully": "rgba(31, 119, 180, 0.7)",
-        "Drained: Artificial": "rgba(31, 119, 180, 0.7)",
-        "Actively Eroding: Flat Bare": "rgba(31, 119, 180, 0.9)",
-        "Actively Eroding: Hagg/Gully": "rgba(31, 119, 180, 0.9)"
+        "Drained (Hagg/Gully)": "rgba(31, 119, 180, 0.75)",
+        "Drained (Artificial)": "rgba(31, 119, 180, 0.75)",
+        "Actively Eroding (Flat Bare)": "rgba(31, 119, 180, 1)",
+        "Actively Eroding (Hagg/Gully)": "rgba(31, 119, 180, 1)"
         },
     "Raised Bog": {
-        "Near Natural": "rgba(255, 127, 14, 0.3)",
+        "": "rgba(255, 127, 14, 0.25)",
+        "Near Natural": "rgba(255, 127, 14, 0.25)",
         "Modified": "rgba(255, 127, 14, 0.5)",
-        "Drained: Hagg/Gully": "rgba(255, 127, 14, 0.7)",
-        "Drained: Artificial": "rgba(255, 127, 14, 0.7)",
-        "Actively Eroding: Flat Bare": "rgba(255, 127, 14, 0.9)",
-        "Actively Eroding: Hagg/Gully": "rgba(255, 127, 14, 0.9)"
+        "Drained (Hagg/Gully)": "rgba(255, 127, 14, 0.75)",
+        "Drained (Artificial)": "rgba(255, 127, 14, 0.75)",
+        "Actively Eroding (Flat Bare)": "rgba(255, 127, 14, 1)",
+        "Actively Eroding (Hagg/Gully)": "rgba(255, 127, 14, 1)"
         },
     "Fen": {
-        "Modified": "rgba(44, 160, 44, 0.9)"
-        },
-    "Grassland": {
-        "Extensive Drained": "rgba(214, 39, 40, 0.9)",
-        "Intensive Drained": "rgba(214, 39, 40, 0.7)"
-        },
-    "Cropland": {
-        "Drained": "rgba(148, 103, 189, 0.9)"
+        "": "rgba(44, 160, 44, 0.25)",
+        "Modified": "rgba(44, 160, 44, 0.5)",
+        "Grassland (Extensive)": "rgba(44, 160, 44, 0.75)",
+        "Grassland (Intensive)": "rgba(44, 160, 44, 0.75)",
+        "Cropland": "rgba(44, 160, 44, 1)"
         }
     }
 
@@ -398,7 +397,7 @@ def server(input, output, session):
     #%%%% MODAL
     
     modal = reactive.value(None)
-    modal_data = reactive.value(None)
+    modal_areaData = reactive.value(None)
     
     @reactive.effect
     def projectsModal():
@@ -437,7 +436,7 @@ def server(input, output, session):
             if values["Predicted Emission Reductions"] != 0:
                 paragraph2 = paragraph2 + [" ", formatNumber(values["Predicted Claimable Emission Reductions"]) , " tCO₂e of this (", round(values["Predicted Claimable Emission Reductions"] / values["Predicted Emission Reductions"] * 100), "%) is claimable."]
             df_subtype = pd.concat([pd.DataFrame({"Type": [re.sub(".*; (.*); .*", "\\1", key)], "Sub-type": [re.sub(".*; .*; (.*)", "\\1", key)], "Area": [values[key]]}) for key in values if "Subarea" in key])
-            modal_data.set(df_subtype)
+            modal_areaData.set({"df": df_subtype, "name": values["Name"]})
             df_subtype["Area Percentage"] = df_subtype["Area"] / df_subtype["Area"].sum() * 100
             df_type = df_subtype.loc[df_subtype["Area Percentage"] > 0].groupby("Type")["Area Percentage"].sum().reset_index().sort_values("Area Percentage", ascending = False)
             df_subtype = df_subtype.loc[(df_subtype["Type"] == df_type["Type"].iloc[0]) & (df_subtype["Area Percentage"] >= 10)].sort_values("Area Percentage", ascending = False)
@@ -467,7 +466,7 @@ def server(input, output, session):
                     ui.p(paragraph1),
                     ui.accordion(ui.accordion_panel("Location"), {"style": "margin-bottom: 16px"}),
                     ui.p(paragraph2),
-                    ui.accordion(ui.accordion_panel("Area Types"), {"style": "margin-bottom: 16px"}),
+                    ui.accordion(ui.accordion_panel("Area Types", output_widget("projectsModalArea")), {"style": "margin-bottom: 16px"}),
                     paragraph3,
                     title = modal(), 
                     footer = [
@@ -484,10 +483,26 @@ def server(input, output, session):
             
     @render_widget
     def projectsModalArea():
-        if modal_data() is not None:
-            #TREE MAP
-            pass
-    
+        if modal_areaData() is not None:
+            df = modal_areaData()["df"].copy()
+            df = df.loc[df["Area"] > 0]
+            df_type = df.groupby("Type")["Area"].sum().reset_index()
+            return go.Figure(
+                data = go.Treemap(
+                    labels = [modal_areaData()["name"]] + df_type["Type"].tolist() + df["Sub-type"].tolist(),
+                    parents = [""] + [modal_areaData()["name"]] * len(df_type) + df["Type"].tolist(),
+                    values = [df_type["Area"].sum()] + df_type["Area"].tolist() + df["Area"].tolist(),
+                    branchvalues = "total",
+                    marker_colors = ["white"] + [AREA_COLOUR_PALETTE[i][""] for i in df_type["Type"].tolist()] + [AREA_COLOUR_PALETTE[row["Type"]][row["Sub-type"]] for i, row in df.iterrows()],
+                    hovertemplate = "<i>%{label}</i><br>%{value:.3r} ha<extra></extra>",
+                    hoverlabel = {"bgcolor": "white"}
+                    ),
+                layout = go.Layout(
+                    margin = {"l": 0, "r": 0, "t": 28, "b": 28},
+                    template = "plotly_white"
+                    )
+                )
+            
     #%%%% TABLE
     
     projectsTable_header = infoCardHeader_server("projectsTable_header", variables = {"Columns": None})
@@ -532,7 +547,7 @@ def server(input, output, session):
         df[input.breakdown()] = df[input.breakdown()].astype(pd.CategoricalDtype(order, ordered = True))
         df["Area Type"] = df["Subarea Type"].str.replace(".*; (.*);.*", "\\1", regex = True)
         df["Area Type"] = df["Area Type"].astype(pd.CategoricalDtype(df.groupby("Area Type")["Subarea Area"].sum().reset_index().sort_values("Subarea Area")["Area Type"].to_list(), ordered = True))
-        df["Subarea Type"] = df["Subarea Type"].str.replace(".*; ", "", regex = True).astype(pd.CategoricalDtype(['Near Natural', 'Modified', 'Drained: Hagg/Gully', 'Drained: Artificial', 'Extensive Drained', 'Intensive Drained', 'Drained', 'Actively Eroding: Flat Bare', 'Actively Eroding: Hagg/Gully'], ordered = True))
+        df["Subarea Type"] = df["Subarea Type"].str.replace(".*; ", "", regex = True).astype(pd.CategoricalDtype(["Near Natural", "Modified", "Drained (Artificial)", "Drained (Hagg/Gully)", "Grassland (Extensive)", 'Grassland (Intensive)', "Actively Eroding (Flat Bare)", "Actively Eroding (Hagg/Gully)", "Cropland"], ordered = True))
         df = df.groupby([input.breakdown(), "Area Type", "Subarea Type"], observed = True)["Subarea Area"].sum().reset_index().sort_values(input.breakdown())
         return go.Figure(
             data = [
