@@ -397,6 +397,7 @@ def server(input, output, session):
     #%%%% MODAL
     
     modal = reactive.value(None)
+    modal_locationData = reactive.value(None)
     modal_areaData = reactive.value(None)
     
     @reactive.effect
@@ -461,13 +462,18 @@ def server(input, output, session):
                     paragraph3 = paragraph3 + formatNumber(df_subtype["Area"].iloc[-1]) + " ha classed as '" + df_subtype["Sub-type"].iloc[-1] + "'."
             else:
                 paragraph3 = paragraph3 + "."
+            arguments = [
+                ui.p(paragraph1),
+                ui.p(paragraph2),
+                ui.accordion(ui.accordion_panel("Area Types", output_widget("projectsModalArea")), {"style": "margin-bottom: 16px"}),
+                paragraph3
+                ]
+            if values["Latitude"] != "" and values["Longitude"] != "":
+                arguments = insert(arguments, 1, ui.accordion(ui.accordion_panel("Location", output_widget("projectsModalLocation")), {"style": "margin-bottom: 16px"}))
+                modal_locationData.set({"latitude": values["Latitude"], "longitude": values["Longitude"], "name": values["Name"]})
             ui.modal_show(
                 ui.modal(
-                    ui.p(paragraph1),
-                    ui.accordion(ui.accordion_panel("Location"), {"style": "margin-bottom: 16px"}),
-                    ui.p(paragraph2),
-                    ui.accordion(ui.accordion_panel("Area Types", output_widget("projectsModalArea")), {"style": "margin-bottom: 16px"}),
-                    paragraph3,
+                    *arguments,
                     title = modal(), 
                     footer = [
                         ui.input_action_button("projectsModalClose", "Close", icon = icon_svg("xmark", height = "14.4px"), style = "flex: 1 0 auto;"), 
@@ -475,11 +481,11 @@ def server(input, output, session):
                         ],
                     size = "m")
                 )
-            
-    @reactive.effect
-    @reactive.event(input.projectsModalClose)
-    def projectsModalClose():
-        ui.modal_remove()
+    
+    @render_widget
+    def projectsModalLocation():
+        if modal_locationData() is not None:
+            pass
             
     @render_widget
     def projectsModalArea():
@@ -502,6 +508,11 @@ def server(input, output, session):
                     template = "plotly_white"
                     )
                 )
+        
+    @reactive.effect
+    @reactive.event(input.projectsModalClose)
+    def projectsModalClose():
+        ui.modal_remove()
             
     #%%%% TABLE
     
@@ -693,12 +704,8 @@ if __name__ == "__main__":
 
 #PROJECT MODAL TRIGGER FROM MAP MAY NEED NEW TRIGGER TO AVOID NEED TO RESET -> NONE -> NEW TRIGGER; REMOVE TABLE SELECTION ON MODAL TRIGGER
 
-#SORT INPUT DATA ALPHABETICALLY BY NAME
-
 #IF POSSIBLE: IMPROVE TABLE STYLING, REDUCE HEADER WIDTH, ETC.
 
 #ADD INFO BUTTON TO BREAKDOWN AND FILTER ACCORDIONS IN SIDEBAR; HIDE/DISABLE BREAKDOWN ON OVERVIEW PAGE
 
-#ADD MAP WITH BREAKDOWN
-
-#ADD CO-ORDINATES AT SITES WHERE THIS IS MISSING
+#ADD MAP WITH BREAKDOWN; MAKE COMPATIBLE WITH SITES WITH MISSING CO-ORDINATES
