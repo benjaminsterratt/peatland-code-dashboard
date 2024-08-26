@@ -4,6 +4,7 @@ import pandas as pd
 
 from shiny import module, ui, reactive, render, App, run_app
 from shinywidgets import output_widget, render_widget, render_plotly
+from ipyleaflet import Map, Marker, LayerGroup
 from faicons import icon_svg
 
 import plotly.colors as co
@@ -286,6 +287,7 @@ userInterface = ui.page_navbar(
                 full_screen = True),
             ui.card(
                 ui.card_header("Map"),
+                output_widget("projectsMap"),
                 full_screen = True),
         col_widths = [12, 8, 4], row_heights = [2, 7]),
         value = "projects"),
@@ -547,7 +549,27 @@ def server(input, output, session):
             modal.set(None)
         
     #%%%% MAP
+    
+    @render_widget
+    def projectsMap():
+        return Map(center = (56, -4), zoom = 5, scroll_wheel_zoom = True, world_copy_jump = True)
+    
+    def projectsMapCallback(marker):
+        def callback(*args, **kwargs):
+            print(marker.title)
+        return callback
+    
+    def projectsMapMarker(latitude, longitude, title):
+        marker = Marker(location = (latitude, longitude), draggable = False, title = title, rise_on_hover = True)
+        marker.on_click(projectsMapCallback(marker))
+        return marker
         
+    @reactive.effect
+    def projectsMapUpdate():
+        print(projectsMap.widget.controls)
+        projectsMap.widget.layers = (projectsMap.widget.layers[0],)
+        projectsMap.widget.add(LayerGroup(layers = [projectsMapMarker(row["Latitude"], row["Longitude"], row["Name"]) for i, row in data().iterrows() if row["Latitude"] != "" and row["Longitude"] != ""]))
+    
     #%%% AREA
     
     #%%%% BREAKDOWN
@@ -577,8 +599,8 @@ def server(input, output, session):
         df["Subarea Type"] = df["Subarea Type"].str.replace(".*; ", "", regex = True).astype(pd.CategoricalDtype(["Near Natural", "Modified", "Drained (Artificial)", "Drained (Hagg/Gully)", "Grassland (Extensive)", 'Grassland (Intensive)', "Actively Eroding (Flat Bare)", "Actively Eroding (Hagg/Gully)", "Cropland"], ordered = True))
         df = df.groupby([input.breakdown(), "Area Type", "Subarea Type"], observed = True)["Subarea Area"].sum().reset_index().sort_values(input.breakdown())
         areaBreakdown.widget.data = []
-        for i, row in df[["Area Type", "Subarea Type"]].drop_duplicates().sort_values(["Area Type", "Subarea Type"], ascending = False).iterrows():
-            areaBreakdown.widget.add_bar(
+        areaBreakdown.widget.add_traces([
+            go.Bar(
                 x = df.loc[(df["Area Type"] == row["Area Type"]) & (df["Subarea Type"] == row["Subarea Type"]), "Subarea Area"],
                 y = df.loc[(df["Area Type"] == row["Area Type"]) & (df["Subarea Type"] == row["Subarea Type"]), input.breakdown()],
                 orientation = "h",
@@ -589,6 +611,7 @@ def server(input, output, session):
                 hovertemplate = "<b>" + str(row["Area Type"]) + "</b><br><i>" + str(row["Subarea Type"]) + "</i><br>%{x:.3s} ha<extra></extra>",
                 hoverlabel = {"bgcolor": "white"}
                 )
+            for i, row in df[["Area Type", "Subarea Type"]].drop_duplicates().sort_values(["Area Type", "Subarea Type"], ascending = False).iterrows()])
         areaBreakdown.widget.update_layout(
             yaxis_title_text = input.breakdown()
             )
@@ -613,8 +636,8 @@ def server(input, output, session):
         df = data().copy()
         df, order = orderAndTruncateBreakdown(df, input.breakdown(), areaDistribution_header["Y-axis"]())
         areaDistribution.widget.data = []
-        for value in order:
-            areaDistribution.widget.add_violin(
+        areaDistribution.widget.add_traces([
+            go.Violin(
                 x = df.loc[df[input.breakdown()] == value, input.breakdown()],
                 y = df.loc[df[input.breakdown()] == value, areaDistribution_header["Y-axis"]()],
                 spanmode = "hard",
@@ -627,6 +650,7 @@ def server(input, output, session):
                 hovertemplate = "<i>%{hovertext}</i><br>%{y:." + CONTINUOUS_COLUMNS[areaDistribution_header["Y-axis"]()]["ROUNDING"] + "} " + CONTINUOUS_COLUMNS[areaDistribution_header["Y-axis"]()]["UNIT"] + "<extra></extra>",
                 hoverlabel = {"bgcolor": "white"}
                 )
+            for value in order])
         areaDistribution.widget.update_layout(
             xaxis_title_text = input.breakdown(),
             yaxis_title_text = areaDistribution_header["Y-axis"]().capitalize() + " (" + CONTINUOUS_COLUMNS[areaDistribution_header["Y-axis"]()]["UNIT"] + ")"
@@ -663,8 +687,8 @@ def server(input, output, session):
         df = df.groupby(["Year", input.breakdown()])[carbonPathway_header["Y-axis"]()].sum().reset_index().sort_values("Year")
         df[carbonPathway_header["Y-axis"]()] = df.groupby(input.breakdown())[carbonPathway_header["Y-axis"]()].cumsum()
         carbonPathway.widget.data = []
-        for value in order:
-            carbonPathway.widget.add_scatter(
+        carbonPathway.widget.add_traces([
+            go.Scatter(
                 x = df.loc[df[input.breakdown()] == value, "Year"],
                 y = df.loc[df[input.breakdown()] == value, carbonPathway_header["Y-axis"]()],
                 stackgroup = "default",
@@ -673,6 +697,7 @@ def server(input, output, session):
                 marker = {"color": BREAKDOWN_COLOUR_PALETTE[input.breakdown()][value]},
                 hovertemplate = "%{y:." + CONTINUOUS_COLUMNS[carbonPathway_header["Y-axis"]()]["ROUNDING"] + "} " + CONTINUOUS_COLUMNS[carbonPathway_header["Y-axis"]()]["UNIT"]
                 )
+            for value in order])
         carbonPathway.widget.update_layout(
             yaxis_title_text = carbonPathway_header["Y-axis"]().capitalize() + " (" + CONTINUOUS_COLUMNS[carbonPathway_header["Y-axis"]()]["UNIT"] + ")",
             legend_title_text = input.breakdown()
@@ -700,8 +725,8 @@ def server(input, output, session):
         df["Original Breakdown"] = df[input.breakdown()]
         df, order = orderAndTruncateBreakdown(df, input.breakdown(), carbonPoints_header["Y-axis"]())
         carbonPoints.widget.data = []
-        for value in order:
-            carbonPoints.widget.add_scatter(
+        carbonPoints.widget.add_traces([
+            go.Scatter(
                 x = df.loc[df[input.breakdown()] == value, carbonPoints_header["X-axis"]()],
                 y = df.loc[df[input.breakdown()] == value, carbonPoints_header["Y-axis"]()],
                 name = value,
@@ -711,6 +736,7 @@ def server(input, output, session):
                 hovertemplate = "<b>%{customdata[0]}</b><br><i>%{customdata[1]}</i><br>%{x:." + CONTINUOUS_COLUMNS[carbonPoints_header["X-axis"]()]["ROUNDING"] + "} " + CONTINUOUS_COLUMNS[carbonPoints_header["X-axis"]()]["UNIT"] + "<br>%{y:." + CONTINUOUS_COLUMNS[carbonPoints_header["Y-axis"]()]["ROUNDING"] + "} " + CONTINUOUS_COLUMNS[carbonPoints_header["Y-axis"]()]["UNIT"] + "<extra></extra>",
                 hoverlabel = {"bgcolor": "white"}
                 )
+            for value in order])
         carbonPoints.widget.update_layout(
             xaxis_title_text = carbonPoints_header["X-axis"]().capitalize() + " (" + CONTINUOUS_COLUMNS[carbonPoints_header["X-axis"]()]["UNIT"] + ")",
             yaxis_title_text = carbonPoints_header["Y-axis"]().capitalize() + " (" + CONTINUOUS_COLUMNS[carbonPoints_header["Y-axis"]()]["UNIT"] + ")",
@@ -733,3 +759,7 @@ if __name__ == "__main__":
 #ADD INFO BUTTON TO BREAKDOWN AND FILTER ACCORDIONS IN SIDEBAR; HIDE/DISABLE BREAKDOWN ON OVERVIEW PAGE
 
 #ADD MAP WITH BREAKDOWN; MAKE COMPATIBLE WITH SITES WITH MISSING CO-ORDINATES
+
+#ADD INFO BUTTON TO MAP
+
+#CHANGE HOVER FORMAT TO GROUP IDENTIFIER (IF NEEDED FOR UNIQUE IDENTIFICATION) > INDIVIDUAL IDENTIFIER > STATS. HIERARCHY IS BOLD > ITALICS > NORMAL WITH ITALICS AND BOLD ONLY USED IF NECESSARY.
