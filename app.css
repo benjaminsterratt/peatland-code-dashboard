@@ -9,3 +9,8 @@
 .plotly-notifier {
   display: none;
 }
+
+.leaflet-div-icon {
+  background-color: transparent !important;
+  border-color: transparent !important;
+}
