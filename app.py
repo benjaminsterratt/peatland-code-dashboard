@@ -35,8 +35,11 @@ def formatNumber(number):
         suffix = ""
     return f"{number:.3g}{suffix}"
 
-def orderAndTruncateBreakdown(df, breakdown, order, truncate = 5):
-    order = df.groupby(breakdown)[order].sum().sort_values(ascending = False).reset_index()[breakdown].to_list()
+def orderAndTruncateBreakdown(df, breakdown, order = None, truncate = 5):
+    if order is None:
+        order = df[breakdown].value_counts().index.to_list()
+    else:
+        order = df.groupby(breakdown)[order].sum().sort_values(ascending = False).reset_index()[breakdown].to_list()
     if len(order) > truncate:
         order = order[0:5]
         df[breakdown] = df[breakdown].where(df[breakdown].isin(order), "Other")
@@ -142,6 +145,14 @@ def filter_ui(title):
 @module.server
 def filter_server(input, output, session, name, filters, resetInput = None):
     
+    selection = reactive.value(BREAKDOWN_CHOICES[name])
+        
+    @reactive.effect
+    @reactive.event(input.filter)
+    def updateSelection():
+        if sorted(input.filter()) != selection():
+            selection.set(sorted(input.filter()))
+        
     @reactive.effect
     def updateLabels():
         df = DATA.copy()
@@ -150,7 +161,8 @@ def filter_server(input, output, session, name, filters, resetInput = None):
                 df = df[df[column].isin(filters[column]())]
         df = pd.merge(DATA.copy()[[name]].drop_duplicates(), df[name].value_counts().reset_index().rename(columns = {"index": name, "count": "Count"}), how = "left").sort_values(["Count", name], ascending = [False, True])
         df["Count"] = df["Count"].fillna(0).astype(int)
-        ui.update_checkbox_group("filter", choices = {row[name]: row[name] + " (" + str(row["Count"]) + ")" for i, row in df.iterrows()}, selected = input.filter())
+        with reactive.isolate():
+            ui.update_checkbox_group("filter", choices = {row[name]: row[name] + " (" + str(row["Count"]) + ")" for i, row in df.iterrows()}, selected = selection())
     
     if len(BREAKDOWN_CHOICES[name]) > 5:
     
@@ -171,7 +183,7 @@ def filter_server(input, output, session, name, filters, resetInput = None):
         def reset():
             ui.update_checkbox_group("filter", selected = BREAKDOWN_CHOICES[name])
             
-    return input.filter
+    return selection
 
 #%%% VALUE BOXES
 
@@ -486,6 +498,10 @@ def server(input, output, session):
     
     @render_widget
     def projectsModalLocation():
+        pass
+        
+    @reactive.effect
+    def projectsModalLocationUpdate():
         if modal_locationData() is not None:
             pass
             
@@ -558,7 +574,7 @@ def server(input, output, session):
     
     def projectsMapCallback(marker):
         def callback(*args, **kwargs):
-            print(marker.title)
+            modal.set(marker.title)
         return callback
     
     def projectsMapMarker(latitude, longitude, title, category):
@@ -570,7 +586,7 @@ def server(input, output, session):
     def projectsMapUpdate():
         if input.main() == "projects":
             df = data().copy()
-            df, order = orderAndTruncateBreakdown(df, input.breakdown(), areaDistribution_header["Y-axis"]())
+            df, order = orderAndTruncateBreakdown(df, input.breakdown())
             projectsMap.widget.layers = (projectsMap.widget.layers[0],)
             projectsMap.widget.add(MarkerCluster(markers = [projectsMapMarker(row["Latitude"], row["Longitude"], row["Name"], row[input.breakdown()]) for i, row in df.iterrows() if row["Latitude"] != "" and row["Longitude"] != ""]))
             projectsMap.widget.controls = projectsMap.widget.controls[0:2]
