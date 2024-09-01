@@ -2,15 +2,19 @@
   margin-bottom: 0px;
 }
 
-.popover {
-  max-width: 330px;
-}
-
 .plotly-notifier {
   display: none;
+}
+
+shiny-data-frame .shiny-data-grid > table > thead > tr > th {
+  white-space: normal !important;
 }
 
 .leaflet-div-icon {
   background-color: transparent !important;
   border-color: transparent !important;
+}
+
+.popover {
+  max-width: 330px;
 }

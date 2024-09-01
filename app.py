@@ -288,7 +288,6 @@ userInterface = ui.page_navbar(
             col_widths = [12, 4, 4, 4], row_heights = [2, 7]),
         value = "overview"),
     ui.nav_panel(
-        #PROJECT MAP
         #SELECTED PROJECT INFORMATION + PLOTS AS MODAL
         "Projects",
         ui.layout_columns(
@@ -534,6 +533,7 @@ def server(input, output, session):
     @reactive.effect
     @reactive.event(input.projectsModalClose)
     def projectsModalClose():
+        modal.set(None)
         ui.modal_remove()
             
     #%%%% TABLE
@@ -549,20 +549,13 @@ def server(input, output, session):
             df["End Year"] = df["End Year"].where(~df["Start Year"].isna(), None)
         df = df[["Name", input.breakdown(), *projectsTable_header["Columns"]()]].rename(columns = {column: column + " (" + CONTINUOUS_COLUMNS[column]["UNIT"] + ")" for column in projectsTable_header["Columns"]() if column in CONTINUOUS_COLUMNS})
         return render.DataTable(df, width = "100%", height = "100%", summary = False, selection_mode = "row")
-            
-    row = reactive.value(None)
     
     @reactive.effect
-    @reactive.event(projectsTable.input_cell_selection)
-    def projectsTableTriggerModal():
-        selectedRow = projectsTable.input_cell_selection()["rows"]
-        if len(selectedRow) > 0:
-            if selectedRow != row():
-                row.set(selectedRow)
-                modal.set(data()["Name"].iloc[projectsTable.input_cell_selection()["rows"][0]])
-        else:
-            row.set(None)
-            modal.set(None)
+    @reactive.event(projectsTable.cell_selection)
+    async def projectsTableTriggerModal():
+        if len(projectsTable.cell_selection()["rows"]) == 1:
+            modal.set(data()["Name"].iloc[projectsTable.cell_selection()["rows"][0]])
+            await projectsTable.update_cell_selection(None)
         
     #%%%% MAP
     
@@ -777,9 +770,5 @@ if __name__ == "__main__":
     run_app(app)
 
 #%% TODO
-
-#PROJECT MODAL TRIGGER FROM MAP MAY NEED NEW TRIGGER TO AVOID NEED TO RESET -> NONE -> NEW TRIGGER; REMOVE TABLE SELECTION ON MODAL TRIGGER
-
-#IF POSSIBLE: IMPROVE TABLE STYLING, REDUCE HEADER WIDTH, ETC.
 
 #ADD INFO BUTTON TO BREAKDOWN AND FILTER ACCORDIONS IN SIDEBAR; HIDE/DISABLE BREAKDOWN ON OVERVIEW PAGE
