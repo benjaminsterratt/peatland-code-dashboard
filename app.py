@@ -288,7 +288,6 @@ userInterface = ui.page_navbar(
             col_widths = [12, 4, 4, 4], row_heights = [2, 7]),
         value = "overview"),
     ui.nav_panel(
-        #SELECTED PROJECT INFORMATION + PLOTS AS MODAL
         "Projects",
         ui.layout_columns(
             valueBoxes_ui("valueBoxes_projects", 1),
@@ -497,12 +496,9 @@ def server(input, output, session):
     
     @render_widget
     def projectsModalLocation():
-        pass
-        
-    @reactive.effect
-    def projectsModalLocationUpdate():
-        if modal_locationData() is not None:
-            pass
+        location = Map(center = [modal_locationData()["latitude"], modal_locationData()["longitude"]], zoom = 6, scroll_wheel_zoom = True, world_copy_jump = True)
+        location.add(Marker(location = (modal_locationData()["latitude"], modal_locationData()["longitude"]), icon = DivIcon(html = str(icon_svg("location-dot", height = "41px")), icon_size = (30.75, 41), icon_anchor = (15.375, 41)), draggable = False, title = modal_locationData()["name"]))
+        return location
             
     @render_plotly
     def projectsModalArea():
@@ -772,3 +768,5 @@ if __name__ == "__main__":
 #%% TODO
 
 #ADD INFO BUTTON TO BREAKDOWN AND FILTER ACCORDIONS IN SIDEBAR; HIDE/DISABLE BREAKDOWN ON OVERVIEW PAGE
+
+#ADD ABOUT PAGE
