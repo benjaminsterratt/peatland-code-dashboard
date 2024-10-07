@@ -496,9 +496,10 @@ def server(input, output, session):
     
     @render_widget
     def projectsModalLocation():
-        location = Map(center = [modal_locationData()["latitude"], modal_locationData()["longitude"]], zoom = 6, scroll_wheel_zoom = True, world_copy_jump = True)
-        location.add(Marker(location = (modal_locationData()["latitude"], modal_locationData()["longitude"]), icon = DivIcon(html = str(icon_svg("location-dot", height = "41px")), icon_size = (30.75, 41), icon_anchor = (15.375, 41)), draggable = False, title = modal_locationData()["name"]))
-        return location
+        if modal_locationData() is not None:
+            location = Map(center = [modal_locationData()["latitude"], modal_locationData()["longitude"]], zoom = 6, scroll_wheel_zoom = True, world_copy_jump = True)
+            location.add(Marker(location = (modal_locationData()["latitude"], modal_locationData()["longitude"]), icon = DivIcon(html = str(icon_svg("location-dot", height = "41px")), icon_size = (30.75, 41), icon_anchor = (15.375, 41)), draggable = False, title = modal_locationData()["name"]))
+            return location
             
     @render_plotly
     def projectsModalArea():
