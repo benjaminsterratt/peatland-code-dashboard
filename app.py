@@ -272,18 +272,20 @@ userInterface = ui.page_navbar(
     ui.nav_panel(
         #PROJECTS MAP (NON-BREAKDOWN) -> LINK TO PROJECTS TAB
         #AREA TREE MAP (NON-BREAKDOWN) -> LINK TO AREA TAB
-        #CARBON PATHWAY (NON-BREAKDOWN) -> LINK TO CARBON TAB
         "Overview",
         ui.layout_columns(
             valueBoxes_ui("valueBoxes_overview"),
             ui.card(
-                ui.card_header(linkedCardHeader("link_projects", "Projects"))
+                ui.card_header(linkedCardHeader("link_projects", "Projects")),
+                output_widget("overviewProjects")
                 ),
             ui.card(
-                ui.card_header(linkedCardHeader("link_area", "Area"))
+                ui.card_header(linkedCardHeader("link_area", "Area")),
+                output_widget("overviewArea")
                 ),
             ui.card(
-                ui.card_header(linkedCardHeader("link_carbon", "Carbon"))
+                ui.card_header(linkedCardHeader("link_carbon", "Carbon")),
+                output_widget("overviewCarbon")
                 ),
             col_widths = [12, 4, 4, 4], row_heights = [2, 7]),
         value = "overview"),
@@ -403,6 +405,48 @@ def server(input, output, session):
     @reactive.event(input.link_carbon)
     def linkCarbon():
         ui.update_navs("main", "carbon")
+        
+    #%%% OVERVIEW
+    
+    #%%%% PROJECTS
+    
+    #%%%% AREA
+    
+    #%%%% CARBON
+    
+    @render_plotly
+    def overviewCarbon():
+        return go.Figure(
+            layout = go.Layout(
+                xaxis = {"title_text": "Year"},
+                yaxis = {"title_text": "Predicted emission reductions (" + CONTINUOUS_COLUMNS["Predicted Emission Reductions"]["UNIT"] + ")"},
+                hovermode = "x unified",
+                margin = {"l": 0, "r": 0, "t": 28, "b": 0},
+                modebar = {"remove": "autoScale2d"},
+                template = "plotly_white"
+                )
+            )
+    
+    @reactive.effect
+    def overviewCarbonUpdate():
+        if input.main() == "overview":
+            df = data().copy()
+            df["Year"] = [list(range(df["Start Year"].min() - 1, df["End Year"].max() + 2)) for i in range(0, len(df))]
+            df = df.explode("Year")
+            df["Predicted Emission Reductions"] = (df["Predicted Emission Reductions"] / df["Duration"]).where((df["Year"] >= df["Start Year"]) & (df["Year"] <= df["End Year"]), 0)
+            df = df.groupby("Year")["Predicted Emission Reductions"].sum().reset_index().sort_values("Year")
+            df["Predicted Emission Reductions"] = df["Predicted Emission Reductions"].cumsum()
+            overviewCarbon.widget.data = []
+            overviewCarbon.widget.add_trace(
+                go.Scatter(
+                    x = df["Year"],
+                    y = df["Predicted Emission Reductions"],
+                    stackgroup = "default",
+                    name = "Predicted emission reductions",
+                    mode = "lines",
+                    hovertemplate = "%{y:." + CONTINUOUS_COLUMNS["Predicted Emission Reductions"]["ROUNDING"] + "} " + CONTINUOUS_COLUMNS["Predicted Emission Reductions"]["UNIT"]
+                    )
+                )
                 
     #%%% PROJECTS
     
@@ -767,6 +811,8 @@ if __name__ == "__main__":
     run_app(app)
 
 #%% TODO
+
+#REMOVE UNIFIED HOVER FROM OVERVIEW CARBON PLOT
 
 #ADD INFO BUTTON TO BREAKDOWN AND FILTER ACCORDIONS IN SIDEBAR; HIDE/DISABLE BREAKDOWN ON OVERVIEW PAGE
 
