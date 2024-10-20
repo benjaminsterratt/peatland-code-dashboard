@@ -420,7 +420,6 @@ def server(input, output, session):
             layout = go.Layout(
                 xaxis = {"title_text": "Year"},
                 yaxis = {"title_text": "Predicted emission reductions (" + CONTINUOUS_COLUMNS["Predicted Emission Reductions"]["UNIT"] + ")"},
-                hovermode = "x unified",
                 margin = {"l": 0, "r": 0, "t": 28, "b": 0},
                 modebar = {"remove": "autoScale2d"},
                 template = "plotly_white"
@@ -444,7 +443,8 @@ def server(input, output, session):
                     stackgroup = "default",
                     name = "Predicted emission reductions",
                     mode = "lines",
-                    hovertemplate = "%{y:." + CONTINUOUS_COLUMNS["Predicted Emission Reductions"]["ROUNDING"] + "} " + CONTINUOUS_COLUMNS["Predicted Emission Reductions"]["UNIT"]
+                    hovertemplate = "%{x:.0f}<br>%{y:." + CONTINUOUS_COLUMNS["Predicted Emission Reductions"]["ROUNDING"] + "} " + CONTINUOUS_COLUMNS["Predicted Emission Reductions"]["UNIT"] + "<extra></extra>",
+                    hoverlabel = {"bgcolor": "white"}
                     )
                 )
                 
@@ -811,8 +811,6 @@ if __name__ == "__main__":
     run_app(app)
 
 #%% TODO
-
-#REMOVE UNIFIED HOVER FROM OVERVIEW CARBON PLOT
 
 #ADD INFO BUTTON TO BREAKDOWN AND FILTER ACCORDIONS IN SIDEBAR; HIDE/DISABLE BREAKDOWN ON OVERVIEW PAGE
 
