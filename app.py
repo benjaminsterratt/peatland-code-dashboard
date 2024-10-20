@@ -416,6 +416,17 @@ def server(input, output, session):
     
     #%%%% PROJECTS
     
+    @render_widget
+    def overviewProjects():
+        return Map(center = (56, -2.5), zoom = 5, scroll_wheel_zoom = True, world_copy_jump = True)
+        
+    @reactive.effect
+    def overviewProjectsUpdate():
+        if input.main() == "overview":
+            df = data().copy()
+            overviewProjects.widget.layers = (overviewProjects.widget.layers[0],)
+            overviewProjects.widget.add(MarkerCluster(markers = [Marker(location = (row["Latitude"], row["Longitude"]), icon = DivIcon(html = str(icon_svg("location-dot", fill = co.DEFAULT_PLOTLY_COLORS[0], height = "41px")), icon_size = (30.75, 41), icon_anchor = (15.375, 41)), draggable = False, title = row["Name"], rise_on_hover = True) for i, row in df.iterrows() if row["Latitude"] != "" and row["Longitude"] != ""]))
+    
     #%%%% AREA
     
     @render_plotly
@@ -575,7 +586,7 @@ def server(input, output, session):
     def projectsModalLocation():
         if modal_locationData() is not None:
             location = Map(center = [modal_locationData()["latitude"], modal_locationData()["longitude"]], zoom = 6, scroll_wheel_zoom = True, world_copy_jump = True)
-            location.add(Marker(location = (modal_locationData()["latitude"], modal_locationData()["longitude"]), icon = DivIcon(html = str(icon_svg("location-dot", height = "41px")), icon_size = (30.75, 41), icon_anchor = (15.375, 41)), draggable = False, title = modal_locationData()["name"]))
+            location.add(Marker(location = (modal_locationData()["latitude"], modal_locationData()["longitude"]), icon = DivIcon(html = str(icon_svg("location-dot", fill = co.DEFAULT_PLOTLY_COLORS[0], height = "41px")), icon_size = (30.75, 41), icon_anchor = (15.375, 41)), draggable = False, title = modal_locationData()["name"]))
             return location
             
     @render_plotly
@@ -844,5 +855,7 @@ if __name__ == "__main__":
     run_app(app)
 
 #%% TODO
+
+#ONLY REFRESH PLOTS ON PAGE CHANGE WHEN BREAKDOWN/FILTERS HAVE CHANGED
 
 #ADD ABOUT PAGE
