@@ -271,7 +271,6 @@ userInterface = ui.page_navbar(
     ui.nav_spacer(),
     ui.nav_panel(
         #PROJECTS MAP (NON-BREAKDOWN) -> LINK TO PROJECTS TAB
-        #AREA TREE MAP (NON-BREAKDOWN) -> LINK TO AREA TAB
         "Overview",
         ui.layout_columns(
             valueBoxes_ui("valueBoxes_overview"),
@@ -344,7 +343,7 @@ userInterface = ui.page_navbar(
                                        *[filter_ui(column.replace(" ", "_"), column) for column in list(BREAKDOWN_COLUMNS.keys())],
                                        open = False)
                                    ),
-                open = True),
+                id = "sidebar", open = ["Filters"]),
             width = 420),
     fillable = True,
     header = ui.head_content(ui.include_css("app.css"))
@@ -376,13 +375,20 @@ def server(input, output, session):
         if set(df["ID"]) != set(data()["ID"]):    
             enableResetFilter.set(filtered)
             data.set(df)
+            
+    @reactive.effect
+    def displayBreakdown():
+        if input.main() == "overview":
+            ui.update_accordion("sidebar", show = ["Filters"])
+        else:
+            ui.update_accordion("sidebar", show = ["Breakdown", "Filters"])
     
     @render.ui
     def resetFilters():
         if enableResetFilter.get():
             return ui.input_action_button("resetFilters", "Reset filters", style = "margin-bottom: 16px;")
         else:
-            return ui.input_action_button("resetFilters", "Reset filters", style = "margin-bottom: 16px;", disabled = "")
+            return ui.input_action_button("resetFilters", "Reset filters", style = "margin-bottom: 16px;", disabled = True)
          
     #%%% VALUE BOXES
     
@@ -411,6 +417,33 @@ def server(input, output, session):
     #%%%% PROJECTS
     
     #%%%% AREA
+    
+    @render_plotly
+    def overviewArea():
+        return go.Figure(
+            layout = go.Layout(
+                margin = {"l": 0, "r": 0, "t": 28, "b": 28},
+                template = "plotly_white"
+                )
+            )
+        
+    @reactive.effect
+    def overviewAreaUpdate():
+        if input.main() == "overview":
+            values = data().copy().sum().to_dict()
+            df = pd.concat([pd.DataFrame({"Type": [re.sub(".*; (.*); .*", "\\1", key)], "Sub-type": [re.sub(".*; .*; (.*)", "\\1", key)], "Area": [values[key]]}) for key in values if "Subarea" in key])
+            df = df.loc[df["Area"] > 0]
+            df_type = df.groupby("Type")["Area"].sum().reset_index()
+            overviewArea.widget.data = []
+            overviewArea.widget.add_treemap(
+                labels = ["Peatland"] + df_type["Type"].tolist() + df["Sub-type"].tolist(),
+                parents = [""] + ["Peatland"] * len(df_type) + df["Type"].tolist(),
+                values = [df_type["Area"].sum()] + df_type["Area"].tolist() + df["Area"].tolist(),
+                branchvalues = "total",
+                marker_colors = ["white"] + [AREA_COLOUR_PALETTE[i][""] for i in df_type["Type"].tolist()] + [AREA_COLOUR_PALETTE[row["Type"]][row["Sub-type"]] for i, row in df.iterrows()],
+                hovertemplate = "<i>%{label}</i><br>%{value:.3r} ha<extra></extra>",
+                hoverlabel = {"bgcolor": "white"}
+                )
     
     #%%%% CARBON
     
@@ -811,7 +844,5 @@ if __name__ == "__main__":
     run_app(app)
 
 #%% TODO
-
-#ADD INFO BUTTON TO BREAKDOWN AND FILTER ACCORDIONS IN SIDEBAR; HIDE/DISABLE BREAKDOWN ON OVERVIEW PAGE
 
 #ADD ABOUT PAGE
