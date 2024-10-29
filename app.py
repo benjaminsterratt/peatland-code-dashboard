@@ -1,3 +1,4 @@
+import pathlib
 import re
 
 import pandas as pd
@@ -48,7 +49,7 @@ def orderAndTruncateBreakdown(df, breakdown, order = None, truncate = 5):
 
 #%% INPUTS
 
-DATA = pd.read_csv("data.csv", keep_default_na = False)
+DATA = pd.read_csv(pathlib.Path(__file__).parent / "data.csv", keep_default_na = False)
 
 BREAKDOWN_COLUMNS = {
     "Country": "country",
@@ -346,7 +347,7 @@ userInterface = ui.page_navbar(
                 id = "sidebar", open = ["Filters"]),
             width = 420),
     fillable = True,
-    header = ui.head_content(ui.include_css("app.css"))
+    header = ui.head_content(ui.include_css(pathlib.Path(__file__).parent / "app.css"))
     )
 
 #%% SERVER
