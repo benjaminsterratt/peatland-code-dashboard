@@ -420,13 +420,12 @@ def server(input, output, session):
     def overviewProjects():
         return Map(center = (56, -2.5), zoom = 5, scroll_wheel_zoom = True, world_copy_jump = True)
         
-    @reactive.effect
+    @reactive.calc
     def overviewProjectsUpdate():
-        if input.main() == "overview":
-            df = data().copy()
-            overviewProjects.widget.layers = (overviewProjects.widget.layers[0],)
-            overviewProjects.widget.add(MarkerCluster(markers = [Marker(location = (row["Latitude"], row["Longitude"]), icon = DivIcon(html = str(icon_svg("location-dot", fill = co.DEFAULT_PLOTLY_COLORS[0], height = "41px")), icon_size = (30.75, 41), icon_anchor = (15.375, 41)), draggable = False, title = row["Name"], rise_on_hover = True) for i, row in df.iterrows() if row["Latitude"] != "" and row["Longitude"] != ""]))
-    
+        df = data().copy()
+        overviewProjects.widget.layers = (overviewProjects.widget.layers[0],)
+        overviewProjects.widget.add(MarkerCluster(markers = [Marker(location = (row["Latitude"], row["Longitude"]), icon = DivIcon(html = str(icon_svg("location-dot", fill = co.DEFAULT_PLOTLY_COLORS[0], height = "41px")), icon_size = (30.75, 41), icon_anchor = (15.375, 41)), draggable = False, title = row["Name"], rise_on_hover = True) for i, row in df.iterrows() if row["Latitude"] != "" and row["Longitude"] != ""]))
+
     #%%%% AREA
     
     @render_plotly
@@ -438,23 +437,22 @@ def server(input, output, session):
                 )
             )
         
-    @reactive.effect
+    @reactive.calc
     def overviewAreaUpdate():
-        if input.main() == "overview":
-            values = data().copy().sum().to_dict()
-            df = pd.concat([pd.DataFrame({"Type": [re.sub(".*; (.*); .*", "\\1", key)], "Sub-type": [re.sub(".*; .*; (.*)", "\\1", key)], "Area": [values[key]]}) for key in values if "Subarea" in key])
-            df = df.loc[df["Area"] > 0]
-            df_type = df.groupby("Type")["Area"].sum().reset_index()
-            overviewArea.widget.data = []
-            overviewArea.widget.add_treemap(
-                labels = ["Peatland"] + df_type["Type"].tolist() + df["Sub-type"].tolist(),
-                parents = [""] + ["Peatland"] * len(df_type) + df["Type"].tolist(),
-                values = [df_type["Area"].sum()] + df_type["Area"].tolist() + df["Area"].tolist(),
-                branchvalues = "total",
-                marker_colors = ["white"] + [AREA_COLOUR_PALETTE[i][""] for i in df_type["Type"].tolist()] + [AREA_COLOUR_PALETTE[row["Type"]][row["Sub-type"]] for i, row in df.iterrows()],
-                hovertemplate = "<i>%{label}</i><br>%{value:.3r} ha<extra></extra>",
-                hoverlabel = {"bgcolor": "white"}
-                )
+        values = data().copy().sum().to_dict()
+        df = pd.concat([pd.DataFrame({"Type": [re.sub(".*; (.*); .*", "\\1", key)], "Sub-type": [re.sub(".*; .*; (.*)", "\\1", key)], "Area": [values[key]]}) for key in values if "Subarea" in key])
+        df = df.loc[df["Area"] > 0]
+        df_type = df.groupby("Type")["Area"].sum().reset_index()
+        overviewArea.widget.data = []
+        overviewArea.widget.add_treemap(
+            labels = ["Peatland"] + df_type["Type"].tolist() + df["Sub-type"].tolist(),
+            parents = [""] + ["Peatland"] * len(df_type) + df["Type"].tolist(),
+            values = [df_type["Area"].sum()] + df_type["Area"].tolist() + df["Area"].tolist(),
+            branchvalues = "total",
+            marker_colors = ["white"] + [AREA_COLOUR_PALETTE[i][""] for i in df_type["Type"].tolist()] + [AREA_COLOUR_PALETTE[row["Type"]][row["Sub-type"]] for i, row in df.iterrows()],
+            hovertemplate = "<i>%{label}</i><br>%{value:.3r} ha<extra></extra>",
+            hoverlabel = {"bgcolor": "white"}
+            )
     
     #%%%% CARBON
     
@@ -470,27 +468,26 @@ def server(input, output, session):
                 )
             )
     
-    @reactive.effect
+    @reactive.calc
     def overviewCarbonUpdate():
-        if input.main() == "overview":
-            df = data().copy()
-            df["Year"] = [list(range(df["Start Year"].min() - 1, df["End Year"].max() + 2)) for i in range(0, len(df))]
-            df = df.explode("Year")
-            df["Predicted Emission Reductions"] = (df["Predicted Emission Reductions"] / df["Duration"]).where((df["Year"] >= df["Start Year"]) & (df["Year"] <= df["End Year"]), 0)
-            df = df.groupby("Year")["Predicted Emission Reductions"].sum().reset_index().sort_values("Year")
-            df["Predicted Emission Reductions"] = df["Predicted Emission Reductions"].cumsum()
-            overviewCarbon.widget.data = []
-            overviewCarbon.widget.add_trace(
-                go.Scatter(
-                    x = df["Year"],
-                    y = df["Predicted Emission Reductions"],
-                    stackgroup = "default",
-                    name = "Predicted emission reductions",
-                    mode = "lines",
-                    hovertemplate = "%{x:.0f}<br>%{y:." + CONTINUOUS_COLUMNS["Predicted Emission Reductions"]["ROUNDING"] + "} " + CONTINUOUS_COLUMNS["Predicted Emission Reductions"]["UNIT"] + "<extra></extra>",
-                    hoverlabel = {"bgcolor": "white"}
-                    )
+        df = data().copy()
+        df["Year"] = [list(range(df["Start Year"].min() - 1, df["End Year"].max() + 2)) for i in range(0, len(df))]
+        df = df.explode("Year")
+        df["Predicted Emission Reductions"] = (df["Predicted Emission Reductions"] / df["Duration"]).where((df["Year"] >= df["Start Year"]) & (df["Year"] <= df["End Year"]), 0)
+        df = df.groupby("Year")["Predicted Emission Reductions"].sum().reset_index().sort_values("Year")
+        df["Predicted Emission Reductions"] = df["Predicted Emission Reductions"].cumsum()
+        overviewCarbon.widget.data = []
+        overviewCarbon.widget.add_trace(
+            go.Scatter(
+                x = df["Year"],
+                y = df["Predicted Emission Reductions"],
+                stackgroup = "default",
+                name = "Predicted emission reductions",
+                mode = "lines",
+                hovertemplate = "%{x:.0f}<br>%{y:." + CONTINUOUS_COLUMNS["Predicted Emission Reductions"]["ROUNDING"] + "} " + CONTINUOUS_COLUMNS["Predicted Emission Reductions"]["UNIT"] + "<extra></extra>",
+                hoverlabel = {"bgcolor": "white"}
                 )
+            )
                 
     #%%% PROJECTS
     
@@ -660,16 +657,15 @@ def server(input, output, session):
         marker.on_click(projectsMapCallback(marker))
         return marker
         
-    @reactive.effect
+    @reactive.calc
     def projectsMapUpdate():
-        if input.main() == "projects":
-            df = data().copy()
-            df, order = orderAndTruncateBreakdown(df, input.breakdown())
-            projectsMap.widget.layers = (projectsMap.widget.layers[0],)
-            projectsMap.widget.add(MarkerCluster(markers = [projectsMapMarker(row["Latitude"], row["Longitude"], row["Name"], row[input.breakdown()]) for i, row in df.iterrows() if row["Latitude"] != "" and row["Longitude"] != ""]))
-            projectsMap.widget.controls = projectsMap.widget.controls[0:2]
-            projectsMap.widget.add(LegendControl(title = input.breakdown(), legend = {value: BREAKDOWN_COLOUR_PALETTE[input.breakdown()][value] for value in order}, position = "topright"))
-    
+        df = data().copy()
+        df, order = orderAndTruncateBreakdown(df, input.breakdown())
+        projectsMap.widget.layers = (projectsMap.widget.layers[0],)
+        projectsMap.widget.add(MarkerCluster(markers = [projectsMapMarker(row["Latitude"], row["Longitude"], row["Name"], row[input.breakdown()]) for i, row in df.iterrows() if row["Latitude"] != "" and row["Longitude"] != ""]))
+        projectsMap.widget.controls = projectsMap.widget.controls[0:2]
+        projectsMap.widget.add(LegendControl(title = input.breakdown(), legend = {value: BREAKDOWN_COLOUR_PALETTE[input.breakdown()][value] for value in order}, position = "topright"))
+        
     #%%% AREA
     
     #%%%% BREAKDOWN
@@ -688,34 +684,33 @@ def server(input, output, session):
                 )
             )
             
-    @reactive.effect
+    @reactive.calc
     def areaBreakdownUpdate():
-        if input.main() == "area":
-            df = data().copy()
-            df = df.melt(input.breakdown(), [column for column in df.columns if column.startswith("Subarea")], "Subarea Type", "Subarea Area")
-            df, order = orderAndTruncateBreakdown(df, input.breakdown(), "Subarea Area")
-            df[input.breakdown()] = df[input.breakdown()].astype(pd.CategoricalDtype(order, ordered = True))
-            df["Area Type"] = df["Subarea Type"].str.replace(".*; (.*);.*", "\\1", regex = True)
-            df["Area Type"] = df["Area Type"].astype(pd.CategoricalDtype(df.groupby("Area Type")["Subarea Area"].sum().reset_index().sort_values("Subarea Area")["Area Type"].to_list(), ordered = True))
-            df["Subarea Type"] = df["Subarea Type"].str.replace(".*; ", "", regex = True).astype(pd.CategoricalDtype(["Near Natural", "Modified", "Drained (Artificial)", "Drained (Hagg/Gully)", "Grassland (Extensive)", 'Grassland (Intensive)', "Actively Eroding (Flat Bare)", "Actively Eroding (Hagg/Gully)", "Cropland"], ordered = True))
-            df = df.groupby([input.breakdown(), "Area Type", "Subarea Type"], observed = True)["Subarea Area"].sum().reset_index().sort_values(input.breakdown())
-            areaBreakdown.widget.data = []
-            areaBreakdown.widget.add_traces([
-                go.Bar(
-                    x = df.loc[(df["Area Type"] == row["Area Type"]) & (df["Subarea Type"] == row["Subarea Type"]), "Subarea Area"],
-                    y = df.loc[(df["Area Type"] == row["Area Type"]) & (df["Subarea Type"] == row["Subarea Type"]), input.breakdown()],
-                    orientation = "h",
-                    name = row["Subarea Type"],
-                    legendgroup = row["Area Type"],
-                    legendgrouptitle_text = row["Area Type"],
-                    marker = {"color": AREA_COLOUR_PALETTE[row["Area Type"]][row["Subarea Type"]]},
-                    hovertemplate = "<b>" + str(row["Area Type"]) + "</b><br><i>" + str(row["Subarea Type"]) + "</i><br>%{x:.3s} ha<extra></extra>",
-                    hoverlabel = {"bgcolor": "white"}
-                    )
-                for i, row in df[["Area Type", "Subarea Type"]].drop_duplicates().sort_values(["Area Type", "Subarea Type"], ascending = False).iterrows()])
-            areaBreakdown.widget.update_layout(
-                yaxis_title_text = input.breakdown()
+        df = data().copy()
+        df = df.melt(input.breakdown(), [column for column in df.columns if column.startswith("Subarea")], "Subarea Type", "Subarea Area")
+        df, order = orderAndTruncateBreakdown(df, input.breakdown(), "Subarea Area")
+        df[input.breakdown()] = df[input.breakdown()].astype(pd.CategoricalDtype(order, ordered = True))
+        df["Area Type"] = df["Subarea Type"].str.replace(".*; (.*);.*", "\\1", regex = True)
+        df["Area Type"] = df["Area Type"].astype(pd.CategoricalDtype(df.groupby("Area Type")["Subarea Area"].sum().reset_index().sort_values("Subarea Area")["Area Type"].to_list(), ordered = True))
+        df["Subarea Type"] = df["Subarea Type"].str.replace(".*; ", "", regex = True).astype(pd.CategoricalDtype(["Near Natural", "Modified", "Drained (Artificial)", "Drained (Hagg/Gully)", "Grassland (Extensive)", 'Grassland (Intensive)', "Actively Eroding (Flat Bare)", "Actively Eroding (Hagg/Gully)", "Cropland"], ordered = True))
+        df = df.groupby([input.breakdown(), "Area Type", "Subarea Type"], observed = True)["Subarea Area"].sum().reset_index().sort_values(input.breakdown())
+        areaBreakdown.widget.data = []
+        areaBreakdown.widget.add_traces([
+            go.Bar(
+                x = df.loc[(df["Area Type"] == row["Area Type"]) & (df["Subarea Type"] == row["Subarea Type"]), "Subarea Area"],
+                y = df.loc[(df["Area Type"] == row["Area Type"]) & (df["Subarea Type"] == row["Subarea Type"]), input.breakdown()],
+                orientation = "h",
+                name = row["Subarea Type"],
+                legendgroup = row["Area Type"],
+                legendgrouptitle_text = row["Area Type"],
+                marker = {"color": AREA_COLOUR_PALETTE[row["Area Type"]][row["Subarea Type"]]},
+                hovertemplate = "<b>" + str(row["Area Type"]) + "</b><br><i>" + str(row["Subarea Type"]) + "</i><br>%{x:.3s} ha<extra></extra>",
+                hoverlabel = {"bgcolor": "white"}
                 )
+            for i, row in df[["Area Type", "Subarea Type"]].drop_duplicates().sort_values(["Area Type", "Subarea Type"], ascending = False).iterrows()])
+        areaBreakdown.widget.update_layout(
+            yaxis_title_text = input.breakdown()
+            )
     
     #%%%% DISTRIBUTION
     
@@ -732,31 +727,30 @@ def server(input, output, session):
                 )
             )
         
-    @reactive.effect
+    @reactive.calc
     def areaDistributionUpdate():
-        if input.main() == "area":
-            df = data().copy()
-            df, order = orderAndTruncateBreakdown(df, input.breakdown(), areaDistribution_header["Y-axis"]())
-            areaDistribution.widget.data = []
-            areaDistribution.widget.add_traces([
-                go.Violin(
-                    x = df.loc[df[input.breakdown()] == value, input.breakdown()],
-                    y = df.loc[df[input.breakdown()] == value, areaDistribution_header["Y-axis"]()],
-                    spanmode = "hard",
-                    points = "all",
-                    pointpos = 0,
-                    jitter = 0,
-                    line_color = BREAKDOWN_COLOUR_PALETTE[input.breakdown()][value],
-                    hoveron = "points",
-                    hovertext = df.loc[df[input.breakdown()] == value, "Name"],
-                    hovertemplate = "<i>%{hovertext}</i><br>%{y:." + CONTINUOUS_COLUMNS[areaDistribution_header["Y-axis"]()]["ROUNDING"] + "} " + CONTINUOUS_COLUMNS[areaDistribution_header["Y-axis"]()]["UNIT"] + "<extra></extra>",
-                    hoverlabel = {"bgcolor": "white"}
-                    )
-                for value in order])
-            areaDistribution.widget.update_layout(
-                xaxis_title_text = input.breakdown(),
-                yaxis_title_text = areaDistribution_header["Y-axis"]().capitalize() + " (" + CONTINUOUS_COLUMNS[areaDistribution_header["Y-axis"]()]["UNIT"] + ")"
+        df = data().copy()
+        df, order = orderAndTruncateBreakdown(df, input.breakdown(), areaDistribution_header["Y-axis"]())
+        areaDistribution.widget.data = []
+        areaDistribution.widget.add_traces([
+            go.Violin(
+                x = df.loc[df[input.breakdown()] == value, input.breakdown()],
+                y = df.loc[df[input.breakdown()] == value, areaDistribution_header["Y-axis"]()],
+                spanmode = "hard",
+                points = "all",
+                pointpos = 0,
+                jitter = 0,
+                line_color = BREAKDOWN_COLOUR_PALETTE[input.breakdown()][value],
+                hoveron = "points",
+                hovertext = df.loc[df[input.breakdown()] == value, "Name"],
+                hovertemplate = "<i>%{hovertext}</i><br>%{y:." + CONTINUOUS_COLUMNS[areaDistribution_header["Y-axis"]()]["ROUNDING"] + "} " + CONTINUOUS_COLUMNS[areaDistribution_header["Y-axis"]()]["UNIT"] + "<extra></extra>",
+                hoverlabel = {"bgcolor": "white"}
                 )
+            for value in order])
+        areaDistribution.widget.update_layout(
+            xaxis_title_text = input.breakdown(),
+            yaxis_title_text = areaDistribution_header["Y-axis"]().capitalize() + " (" + CONTINUOUS_COLUMNS[areaDistribution_header["Y-axis"]()]["UNIT"] + ")"
+            )
     
     #%%% CARBON
     
@@ -779,32 +773,31 @@ def server(input, output, session):
                 )
             )
     
-    @reactive.effect
+    @reactive.calc
     def carbonPathwayUpdate():
-        if input.main() == "carbon":
-            df = data().copy()
-            df, order = orderAndTruncateBreakdown(df, input.breakdown(), carbonPathway_header["Y-axis"]())
-            df["Year"] = [list(range(df["Start Year"].min() - 1, df["End Year"].max() + 2)) for i in range(0, len(df))]
-            df = df.explode("Year")
-            df[carbonPathway_header["Y-axis"]()] = (df[carbonPathway_header["Y-axis"]()] / df["Duration"]).where((df["Year"] >= df["Start Year"]) & (df["Year"] <= df["End Year"]), 0)
-            df = df.groupby(["Year", input.breakdown()])[carbonPathway_header["Y-axis"]()].sum().reset_index().sort_values("Year")
-            df[carbonPathway_header["Y-axis"]()] = df.groupby(input.breakdown())[carbonPathway_header["Y-axis"]()].cumsum()
-            carbonPathway.widget.data = []
-            carbonPathway.widget.add_traces([
-                go.Scatter(
-                    x = df.loc[df[input.breakdown()] == value, "Year"],
-                    y = df.loc[df[input.breakdown()] == value, carbonPathway_header["Y-axis"]()],
-                    stackgroup = "default",
-                    name = value,
-                    mode = "lines",
-                    marker = {"color": BREAKDOWN_COLOUR_PALETTE[input.breakdown()][value]},
-                    hovertemplate = "%{y:." + CONTINUOUS_COLUMNS[carbonPathway_header["Y-axis"]()]["ROUNDING"] + "} " + CONTINUOUS_COLUMNS[carbonPathway_header["Y-axis"]()]["UNIT"]
-                    )
-                for value in order])
-            carbonPathway.widget.update_layout(
-                yaxis_title_text = carbonPathway_header["Y-axis"]().capitalize() + " (" + CONTINUOUS_COLUMNS[carbonPathway_header["Y-axis"]()]["UNIT"] + ")",
-                legend_title_text = input.breakdown()
+        df = data().copy()
+        df, order = orderAndTruncateBreakdown(df, input.breakdown(), carbonPathway_header["Y-axis"]())
+        df["Year"] = [list(range(df["Start Year"].min() - 1, df["End Year"].max() + 2)) for i in range(0, len(df))]
+        df = df.explode("Year")
+        df[carbonPathway_header["Y-axis"]()] = (df[carbonPathway_header["Y-axis"]()] / df["Duration"]).where((df["Year"] >= df["Start Year"]) & (df["Year"] <= df["End Year"]), 0)
+        df = df.groupby(["Year", input.breakdown()])[carbonPathway_header["Y-axis"]()].sum().reset_index().sort_values("Year")
+        df[carbonPathway_header["Y-axis"]()] = df.groupby(input.breakdown())[carbonPathway_header["Y-axis"]()].cumsum()
+        carbonPathway.widget.data = []
+        carbonPathway.widget.add_traces([
+            go.Scatter(
+                x = df.loc[df[input.breakdown()] == value, "Year"],
+                y = df.loc[df[input.breakdown()] == value, carbonPathway_header["Y-axis"]()],
+                stackgroup = "default",
+                name = value,
+                mode = "lines",
+                marker = {"color": BREAKDOWN_COLOUR_PALETTE[input.breakdown()][value]},
+                hovertemplate = "%{y:." + CONTINUOUS_COLUMNS[carbonPathway_header["Y-axis"]()]["ROUNDING"] + "} " + CONTINUOUS_COLUMNS[carbonPathway_header["Y-axis"]()]["UNIT"]
                 )
+            for value in order])
+        carbonPathway.widget.update_layout(
+            yaxis_title_text = carbonPathway_header["Y-axis"]().capitalize() + " (" + CONTINUOUS_COLUMNS[carbonPathway_header["Y-axis"]()]["UNIT"] + ")",
+            legend_title_text = input.breakdown()
+            )
     
     #%%%% POINTS
     
@@ -822,30 +815,48 @@ def server(input, output, session):
                 )
             )
     
-    @reactive.effect
+    @reactive.calc
     def carbonPointsUpdate():
-        if input.main() == "carbon":
-            df = data().copy()
-            df["Original Breakdown"] = df[input.breakdown()]
-            df, order = orderAndTruncateBreakdown(df, input.breakdown(), carbonPoints_header["Y-axis"]())
-            carbonPoints.widget.data = []
-            carbonPoints.widget.add_traces([
-                go.Scatter(
-                    x = df.loc[df[input.breakdown()] == value, carbonPoints_header["X-axis"]()],
-                    y = df.loc[df[input.breakdown()] == value, carbonPoints_header["Y-axis"]()],
-                    name = value,
-                    mode = "markers",
-                    marker = {"color": BREAKDOWN_COLOUR_PALETTE[input.breakdown()][value]},
-                    hovertext = df.loc[df[input.breakdown()] == value, "Name"],
-                    hovertemplate = "<i>%{hovertext}</i><br>%{x:." + CONTINUOUS_COLUMNS[carbonPoints_header["X-axis"]()]["ROUNDING"] + "} " + CONTINUOUS_COLUMNS[carbonPoints_header["X-axis"]()]["UNIT"] + "<br>%{y:." + CONTINUOUS_COLUMNS[carbonPoints_header["Y-axis"]()]["ROUNDING"] + "} " + CONTINUOUS_COLUMNS[carbonPoints_header["Y-axis"]()]["UNIT"] + "<extra></extra>",
-                    hoverlabel = {"bgcolor": "white"}
-                    )
-                for value in order])
-            carbonPoints.widget.update_layout(
-                xaxis_title_text = carbonPoints_header["X-axis"]().capitalize() + " (" + CONTINUOUS_COLUMNS[carbonPoints_header["X-axis"]()]["UNIT"] + ")",
-                yaxis_title_text = carbonPoints_header["Y-axis"]().capitalize() + " (" + CONTINUOUS_COLUMNS[carbonPoints_header["Y-axis"]()]["UNIT"] + ")",
-                legend_title_text = input.breakdown()
+        df = data().copy()
+        df["Original Breakdown"] = df[input.breakdown()]
+        df, order = orderAndTruncateBreakdown(df, input.breakdown(), carbonPoints_header["Y-axis"]())
+        carbonPoints.widget.data = []
+        carbonPoints.widget.add_traces([
+            go.Scatter(
+                x = df.loc[df[input.breakdown()] == value, carbonPoints_header["X-axis"]()],
+                y = df.loc[df[input.breakdown()] == value, carbonPoints_header["Y-axis"]()],
+                name = value,
+                mode = "markers",
+                marker = {"color": BREAKDOWN_COLOUR_PALETTE[input.breakdown()][value]},
+                hovertext = df.loc[df[input.breakdown()] == value, "Name"],
+                hovertemplate = "<i>%{hovertext}</i><br>%{x:." + CONTINUOUS_COLUMNS[carbonPoints_header["X-axis"]()]["ROUNDING"] + "} " + CONTINUOUS_COLUMNS[carbonPoints_header["X-axis"]()]["UNIT"] + "<br>%{y:." + CONTINUOUS_COLUMNS[carbonPoints_header["Y-axis"]()]["ROUNDING"] + "} " + CONTINUOUS_COLUMNS[carbonPoints_header["Y-axis"]()]["UNIT"] + "<extra></extra>",
+                hoverlabel = {"bgcolor": "white"}
                 )
+            for value in order])
+        carbonPoints.widget.update_layout(
+            xaxis_title_text = carbonPoints_header["X-axis"]().capitalize() + " (" + CONTINUOUS_COLUMNS[carbonPoints_header["X-axis"]()]["UNIT"] + ")",
+            yaxis_title_text = carbonPoints_header["Y-axis"]().capitalize() + " (" + CONTINUOUS_COLUMNS[carbonPoints_header["Y-axis"]()]["UNIT"] + ")",
+            legend_title_text = input.breakdown()
+            )
+        
+    #%%% UPDATES
+        
+    @reactive.effect(priority = -1)
+    def updateTrigger():
+        if input.main() == "overview":
+            overviewProjectsUpdate()
+            overviewAreaUpdate()
+            overviewCarbonUpdate()
+        elif input.main() == "projects":
+            projectsMapUpdate()
+        elif input.main() == "area":
+            areaBreakdownUpdate()
+            areaDistributionUpdate()
+        elif input.main() == "carbon":
+            carbonPathwayUpdate()
+            carbonPointsUpdate()
+        else:
+            raise ValueError("input.main() not in ['overview', 'projects', 'area', 'carbon']")
     
 #%% APP
 
@@ -855,7 +866,5 @@ if __name__ == "__main__":
     run_app(app)
 
 #%% TODO
-
-#ONLY REFRESH PLOTS ON PAGE CHANGE WHEN BREAKDOWN/FILTERS HAVE CHANGED
 
 #ADD ABOUT PAGE
