@@ -446,12 +446,13 @@ def server(input, output, session):
         df_type = df.groupby("Type")["Area"].sum().reset_index()
         overviewArea.widget.data = []
         overviewArea.widget.add_treemap(
+            ids = ["Peatland"] + df_type["Type"].tolist() + (df["Type"] + df["Sub-type"]).tolist(),
             labels = ["Peatland"] + df_type["Type"].tolist() + df["Sub-type"].tolist(),
             parents = [""] + ["Peatland"] * len(df_type) + df["Type"].tolist(),
             values = [df_type["Area"].sum()] + df_type["Area"].tolist() + df["Area"].tolist(),
             branchvalues = "total",
             marker_colors = ["white"] + [AREA_COLOUR_PALETTE[i][""] for i in df_type["Type"].tolist()] + [AREA_COLOUR_PALETTE[row["Type"]][row["Sub-type"]] for i, row in df.iterrows()],
-            hovertemplate = "<i>%{label}</i><br>%{value:.3r} ha<extra></extra>",
+            hovertemplate = "<i>%{label}</i><br>%{value:.3s} ha<extra></extra>",
             hoverlabel = {"bgcolor": "white"}
             )
     
@@ -604,6 +605,7 @@ def server(input, output, session):
             df_type = df.groupby("Type")["Area"].sum().reset_index()
             projectsModalArea.widget.data = []
             projectsModalArea.widget.add_treemap(
+                ids = [modal_areaData()["name"]] + df_type["Type"].tolist() + (df["Type"] + df["Sub-type"]).tolist(),
                 labels = [modal_areaData()["name"]] + df_type["Type"].tolist() + df["Sub-type"].tolist(),
                 parents = [""] + [modal_areaData()["name"]] * len(df_type) + df["Type"].tolist(),
                 values = [df_type["Area"].sum()] + df_type["Area"].tolist() + df["Area"].tolist(),
