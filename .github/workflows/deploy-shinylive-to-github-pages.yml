@@ -3,7 +3,7 @@ name: Deploy Shinylive to GitHub Pages
 on:
   push:
     branches: [$default-branch]
-  workflow-dispatch:
+  workflow_dispatch:
   
 permissions:
   contents: read
