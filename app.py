@@ -3,7 +3,7 @@ import re
 
 import pandas as pd
 
-from shiny import module, ui, reactive, render, App, run_app
+from shiny import module, ui, reactive, render, App
 from shinywidgets import output_widget, render_widget, render_plotly
 from ipyleaflet import Map, Marker, MarkerCluster, DivIcon, LegendControl
 from faicons import icon_svg
@@ -864,10 +864,3 @@ def server(input, output, session):
 #%% APP
 
 app = App(userInterface, server)
-
-if __name__ == "__main__":
-    run_app(app)
-
-#%% TODO
-
-#ADD ABOUT PAGE

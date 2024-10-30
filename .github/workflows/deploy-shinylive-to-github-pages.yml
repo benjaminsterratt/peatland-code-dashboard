@@ -2,7 +2,7 @@ name: Deploy Shinylive to GitHub Pages
 
 on:
   push:
-    branches: [$default-branch]
+    branches: [main]
   workflow_dispatch:
   
 permissions:
@@ -16,6 +16,9 @@ concurrency:
   
 jobs:
   deploy:
+    environment:
+      name: github-pages
+      url: ${{steps.deployment.outputs.page_url}}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

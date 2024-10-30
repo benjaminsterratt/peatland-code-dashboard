@@ -1,1 +1,5 @@
 .spyproject
+
+run-app.py
+
+*.pyc
