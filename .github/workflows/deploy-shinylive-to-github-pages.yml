@@ -29,9 +29,10 @@ jobs:
         with:
           python-version: "3.12.5"
           cache: "pip"
+          cache-dependency-path: "requirements-deploy.txt"
 
       - name: Install required Python packages
-        run: pip install shinylive
+        run: pip install -r requirements-deploy.txt
   
       - name: Export Shinylive
         run: shinylive export . _site
