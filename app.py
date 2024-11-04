@@ -4,8 +4,7 @@ import re
 import pandas as pd
 
 from shiny import module, ui, reactive, render, App
-from shinywidgets import output_widget, render_widget, render_plotly
-from ipyleaflet import Map, Marker, MarkerCluster, DivIcon, LegendControl
+from shinywidgets import output_widget, render_plotly
 from faicons import icon_svg
 
 import plotly.colors as co
@@ -271,7 +270,6 @@ def infoCardHeader_server(input, output, session, breakdownInput = None, variabl
 userInterface = ui.page_navbar(
     ui.nav_spacer(),
     ui.nav_panel(
-        #PROJECTS MAP (NON-BREAKDOWN) -> LINK TO PROJECTS TAB
         "Overview",
         ui.layout_columns(
             valueBoxes_ui("valueBoxes_overview"),
@@ -595,12 +593,30 @@ def server(input, output, session):
                     size = "m")
                 )
     
-    @render_widget
+    @render_plotly
     def projectsModalLocation():
         if modal_locationData() is not None:
-            location = Map(center = [modal_locationData()["latitude"], modal_locationData()["longitude"]], zoom = 6, scroll_wheel_zoom = True, world_copy_jump = True)
-            location.add(Marker(location = (modal_locationData()["latitude"], modal_locationData()["longitude"]), icon = DivIcon(html = str(icon_svg("location-dot", fill = co.DEFAULT_PLOTLY_COLORS[0], height = "41px")), icon_size = (30.75, 41), icon_anchor = (15.375, 41)), draggable = False, title = modal_locationData()["name"]))
-            return location
+            return go.Figure(
+                data = [
+                    go.Scattermap(
+                        lat = [modal_locationData()["latitude"]],
+                        lon = [modal_locationData()["longitude"]],
+                        mode = "markers",
+                        hovertext = [modal_locationData()["name"]],
+                        hovertemplate = "%{hovertext}<extra></extra>",
+                        hoverlabel = {"bgcolor": "white"}
+                        )
+                    ],
+                layout = go.Layout(
+                    map = {
+                        "center": {"lat": float(modal_locationData()["latitude"]), "lon": float(modal_locationData()["longitude"])},
+                        "zoom": 5
+                        },
+                    margin = {"l": 0, "r": 0, "t": 28, "b": 0},
+                    modebar = {"remove": ["select", "lasso"]},
+                    template = "plotly_white"
+                    )
+                )
             
     @render_plotly
     def projectsModalArea():
