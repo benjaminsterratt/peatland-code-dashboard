@@ -376,13 +376,6 @@ def server(input, output, session):
         if set(df["ID"]) != set(data()["ID"]):    
             enableResetFilter.set(filtered)
             data.set(df)
-            
-    @reactive.effect
-    def displayBreakdown():
-        if input.main() == "overview":
-            ui.update_accordion("sidebar", show = ["Filters"])
-        else:
-            ui.update_accordion("sidebar", show = ["Breakdown", "Filters"])
     
     @render.ui
     def resetFilters():
@@ -887,19 +880,22 @@ def server(input, output, session):
     @reactive.effect(priority = -1)
     def updateTrigger():
         if input.main() == "overview":
+            ui.update_accordion("sidebar", show = ["Filters"])
             overviewProjectsUpdate()
             overviewAreaUpdate()
             overviewCarbonUpdate()
-        elif input.main() == "projects":
-            projectsMapUpdate()
-        elif input.main() == "area":
-            areaBreakdownUpdate()
-            areaDistributionUpdate()
-        elif input.main() == "carbon":
-            carbonPathwayUpdate()
-            carbonPointsUpdate()
         else:
-            raise ValueError("input.main() not in ['overview', 'projects', 'area', 'carbon']")
+            ui.update_accordion("sidebar", show = ["Breakdown", "Filters"])
+            if input.main() == "projects":
+                projectsMapUpdate()
+            elif input.main() == "area":
+                areaBreakdownUpdate()
+                areaDistributionUpdate()
+            elif input.main() == "carbon":
+                carbonPathwayUpdate()
+                carbonPointsUpdate()
+            else:
+                raise ValueError("input.main() not in ['overview', 'projects', 'area', 'carbon']")
     
 #%% APP
 
