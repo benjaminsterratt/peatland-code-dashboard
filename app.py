@@ -4,8 +4,7 @@ import re
 import pandas as pd
 
 from shiny import module, ui, reactive, render, App
-from shinywidgets import output_widget, render_widget, render_plotly
-from ipyleaflet import Map, Marker, MarkerCluster, DivIcon, LegendControl
+from shinywidgets import output_widget, render_plotly
 from faicons import icon_svg
 
 import plotly.colors as co
@@ -271,7 +270,6 @@ def infoCardHeader_server(input, output, session, breakdownInput = None, variabl
 userInterface = ui.page_navbar(
     ui.nav_spacer(),
     ui.nav_panel(
-        #PROJECTS MAP (NON-BREAKDOWN) -> LINK TO PROJECTS TAB
         "Overview",
         ui.layout_columns(
             valueBoxes_ui("valueBoxes_overview"),
@@ -376,13 +374,6 @@ def server(input, output, session):
         if set(df["ID"]) != set(data()["ID"]):    
             enableResetFilter.set(filtered)
             data.set(df)
-            
-    @reactive.effect
-    def displayBreakdown():
-        if input.main() == "overview":
-            ui.update_accordion("sidebar", show = ["Filters"])
-        else:
-            ui.update_accordion("sidebar", show = ["Breakdown", "Filters"])
     
     @render.ui
     def resetFilters():
@@ -417,16 +408,37 @@ def server(input, output, session):
     
     #%%%% PROJECTS
     
-    @render_widget
+    @render_plotly
     def overviewProjects():
-        return Map(center = (56, -2.5), zoom = 5, scroll_wheel_zoom = True, world_copy_jump = True)
-        
+        return go.Figure(
+            data = [
+                go.Scattermap(
+                    mode = "markers",
+                    hovertemplate = "%{hovertext}<extra></extra>",
+                    hoverlabel = {"bgcolor": "white"}
+                    )
+                ],
+            layout = go.Layout(
+                map = {
+                    "center": {"lat": 56, "lon": -2.5},
+                    "zoom": 4
+                    },
+                margin = {"l": 0, "r": 0, "t": 28, "b": 0},
+                modebar = {"remove": ["select", "lasso"]},
+                template = "plotly_white"
+                )
+            )
+    
     @reactive.calc
     def overviewProjectsUpdate():
         df = data().copy()
-        overviewProjects.widget.layers = (overviewProjects.widget.layers[0],)
-        overviewProjects.widget.add(MarkerCluster(markers = [Marker(location = (row["Latitude"], row["Longitude"]), icon = DivIcon(html = str(icon_svg("location-dot", fill = co.DEFAULT_PLOTLY_COLORS[0], height = "41px")), icon_size = (30.75, 41), icon_anchor = (15.375, 41)), draggable = False, title = row["Name"], rise_on_hover = True) for i, row in df.iterrows() if row["Latitude"] != "" and row["Longitude"] != ""]))
-
+        df = df[(df["Latitude"] != "") & (df["Longitude"] != "")]
+        overviewProjects.widget.update_traces(
+            lat = df["Latitude"],
+            lon = df["Longitude"],
+            hovertext = df["Name"]
+            )
+    
     #%%%% AREA
     
     @render_plotly
@@ -581,12 +593,30 @@ def server(input, output, session):
                     size = "m")
                 )
     
-    @render_widget
+    @render_plotly
     def projectsModalLocation():
         if modal_locationData() is not None:
-            location = Map(center = [modal_locationData()["latitude"], modal_locationData()["longitude"]], zoom = 6, scroll_wheel_zoom = True, world_copy_jump = True)
-            location.add(Marker(location = (modal_locationData()["latitude"], modal_locationData()["longitude"]), icon = DivIcon(html = str(icon_svg("location-dot", fill = co.DEFAULT_PLOTLY_COLORS[0], height = "41px")), icon_size = (30.75, 41), icon_anchor = (15.375, 41)), draggable = False, title = modal_locationData()["name"]))
-            return location
+            return go.Figure(
+                data = [
+                    go.Scattermap(
+                        lat = [modal_locationData()["latitude"]],
+                        lon = [modal_locationData()["longitude"]],
+                        mode = "markers",
+                        hovertext = [modal_locationData()["name"]],
+                        hovertemplate = "%{hovertext}<extra></extra>",
+                        hoverlabel = {"bgcolor": "white"}
+                        )
+                    ],
+                layout = go.Layout(
+                    map = {
+                        "center": {"lat": float(modal_locationData()["latitude"]), "lon": float(modal_locationData()["longitude"])},
+                        "zoom": 5
+                        },
+                    margin = {"l": 0, "r": 0, "t": 28, "b": 0},
+                    modebar = {"remove": ["select", "lasso"]},
+                    template = "plotly_white"
+                    )
+                )
             
     @render_plotly
     def projectsModalArea():
@@ -646,29 +676,48 @@ def server(input, output, session):
     
     infoCardHeader_server("projectsMap_header", input.breakdown)
     
-    @render_widget
+    @render_plotly
     def projectsMap():
-        return Map(center = (56, -2.5), zoom = 5, scroll_wheel_zoom = True, world_copy_jump = True)
+        return go.Figure(
+            data = [go.Scattermap()],
+            layout = go.Layout(
+                map = {
+                    "center": {"lat": 56, "lon": -2.5},
+                    "zoom": 4
+                    },
+                legend = {"orientation": "h",
+                          "yref": "container"},
+                margin = {"l": 0, "r": 0, "t": 28, "b": 0},
+                modebar = {"remove": ["select", "lasso"]},
+                template = "plotly_white"
+                )
+            )
     
-    def projectsMapCallback(marker):
-        def callback(*args, **kwargs):
-            modal.set(marker.title)
-        return callback
-    
-    def projectsMapMarker(latitude, longitude, title, category):
-        marker = Marker(location = (latitude, longitude), icon = DivIcon(html = str(icon_svg("location-dot", fill = BREAKDOWN_COLOUR_PALETTE[input.breakdown()][category], height = "41px")), icon_size = (30.75, 41), icon_anchor = (15.375, 41)), draggable = False, title = title, rise_on_hover = True)
-        marker.on_click(projectsMapCallback(marker))
-        return marker
+    def projectsMapTriggerModal(trace, points, selector):
+        if len(points.point_inds) == 1:
+            modal.set(trace.hovertext[points.point_inds[0]])
         
     @reactive.calc
     def projectsMapUpdate():
         df = data().copy()
+        df = df[(df["Latitude"] != "") & (df["Longitude"] != "")]
         df, order = orderAndTruncateBreakdown(df, input.breakdown())
-        projectsMap.widget.layers = (projectsMap.widget.layers[0],)
-        projectsMap.widget.add(MarkerCluster(markers = [projectsMapMarker(row["Latitude"], row["Longitude"], row["Name"], row[input.breakdown()]) for i, row in df.iterrows() if row["Latitude"] != "" and row["Longitude"] != ""]))
-        projectsMap.widget.controls = projectsMap.widget.controls[0:2]
-        projectsMap.widget.add(LegendControl(title = input.breakdown(), legend = {value: BREAKDOWN_COLOUR_PALETTE[input.breakdown()][value] for value in order}, position = "topright"))
-        
+        projectsMap.widget.data = [projectsMap.widget.data[0]]
+        projectsMap.widget.add_traces([
+            go.Scattermap(
+                lat = df.loc[df[input.breakdown()] == value, "Latitude"],
+                lon = df.loc[df[input.breakdown()] == value, "Longitude"],
+                name = value,
+                mode = "markers",
+                marker = {"color": BREAKDOWN_COLOUR_PALETTE[input.breakdown()][value]},
+                hovertext = df.loc[df[input.breakdown()] == value, "Name"],
+                hovertemplate = "%{hovertext}<extra></extra>",
+                hoverlabel = {"bgcolor": "white"}
+                )
+            for value in order])
+        for i in range(1, len(projectsMap.widget.data)):
+            projectsMap.widget.data[i].on_click(projectsMapTriggerModal)
+
     #%%% AREA
     
     #%%%% BREAKDOWN
@@ -847,19 +896,22 @@ def server(input, output, session):
     @reactive.effect(priority = -1)
     def updateTrigger():
         if input.main() == "overview":
+            ui.update_accordion("sidebar", show = ["Filters"])
             overviewProjectsUpdate()
             overviewAreaUpdate()
             overviewCarbonUpdate()
-        elif input.main() == "projects":
-            projectsMapUpdate()
-        elif input.main() == "area":
-            areaBreakdownUpdate()
-            areaDistributionUpdate()
-        elif input.main() == "carbon":
-            carbonPathwayUpdate()
-            carbonPointsUpdate()
         else:
-            raise ValueError("input.main() not in ['overview', 'projects', 'area', 'carbon']")
+            ui.update_accordion("sidebar", show = ["Breakdown", "Filters"])
+            if input.main() == "projects":
+                projectsMapUpdate()
+            elif input.main() == "area":
+                areaBreakdownUpdate()
+                areaDistributionUpdate()
+            elif input.main() == "carbon":
+                carbonPathwayUpdate()
+                carbonPointsUpdate()
+            else:
+                raise ValueError("input.main() not in ['overview', 'projects', 'area', 'carbon']")
     
 #%% APP
 
